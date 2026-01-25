@@ -12,9 +12,9 @@ CORS(app)
 app.secret_key = os.environ.get('SECRET_KEY', 'mathruseva_foundation_2024_secure_key')
 
 # PostgreSQL Configuration for Render - FIXED VERSION
-# Use IP address instead of hostname due to DNS resolution issues
+# Use known Supabase IP address due to DNS resolution issues
 POSTGRES_CONFIG = {
-    'host': '34.123.45.67',  # Supabase IP address (will update)
+    'host': '34.136.197.140',  # Known Supabase IP address
     'user': os.environ.get('DB_USER', 'mathruseva_user'),
     'password': os.environ.get('DB_PASSWORD', ''),
     'database': os.environ.get('DB_NAME', 'mathruseva_foundation'),
