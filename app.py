@@ -101,7 +101,16 @@ def test_database():
 # Health check for Render
 @app.route('/health')
 def health():
-    return jsonify({'status': 'healthy', 'database': 'postgresql'})
+    try:
+        # Test database connection
+        conn = get_db_connection()
+        if conn:
+            conn.close()
+            return jsonify({'status': 'healthy', 'database': 'postgresql', 'connection': 'ok'})
+        else:
+            return jsonify({'status': 'healthy', 'database': 'postgresql', 'connection': 'failed'})
+    except Exception as e:
+        return jsonify({'status': 'healthy', 'database': 'postgresql', 'connection': f'error: {str(e)}'})
 
 # Database setup route
 @app.route('/setup-database')
