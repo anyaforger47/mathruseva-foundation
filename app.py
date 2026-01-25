@@ -101,18 +101,37 @@ def test_api():
 @app.route('/api/test-db')
 def test_database():
     try:
+        print("=== DATABASE CONNECTION TEST START ===")
+        print(f"Environment variables loaded: {bool(os.environ.get('DB_HOST'))}")
+        
         conn = get_db_connection()
         if not conn:
-            return jsonify({'error': 'Database connection failed'}), 500
+            print("❌ Connection returned None")
+            return jsonify({'error': 'Database connection failed - returned None'}), 500
+        
+        print("✅ Connection object created successfully")
         
         cursor = conn.cursor()
+        print("✅ Cursor created successfully")
+        
         cursor.execute("SELECT 1 as test")
+        print("✅ Query executed successfully")
+        
         result = cursor.fetchone()
+        print(f"✅ Query result: {result}")
+        
         cursor.close()
         conn.close()
+        print("✅ Connection closed successfully")
+        print("=== DATABASE CONNECTION TEST SUCCESS ===")
         
         return jsonify({'message': 'Database connection working!', 'result': result[0]})
+        
     except Exception as e:
+        print(f"❌ DATABASE CONNECTION TEST FAILED: {str(e)}")
+        print(f"❌ Error type: {type(e).__name__}")
+        print(f"❌ Error details: {repr(e)}")
+        print("=== DATABASE CONNECTION TEST FAILED ===")
         return jsonify({'error': f'Database test failed: {str(e)}'}), 500
 
 # New test endpoint to force deployment
