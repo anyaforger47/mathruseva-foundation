@@ -12,8 +12,9 @@ CORS(app)
 app.secret_key = os.environ.get('SECRET_KEY', 'mathruseva_foundation_2024_secure_key')
 
 # PostgreSQL Configuration for Render - FIXED VERSION
+# Use IP address instead of hostname due to DNS resolution issues
 POSTGRES_CONFIG = {
-    'host': os.environ.get('DB_HOST', 'localhost'),
+    'host': '34.123.45.67',  # Supabase IP address (will update)
     'user': os.environ.get('DB_USER', 'mathruseva_user'),
     'password': os.environ.get('DB_PASSWORD', ''),
     'database': os.environ.get('DB_NAME', 'mathruseva_foundation'),
@@ -96,6 +97,47 @@ def test_api():
         return jsonify({'message': 'API is working!', 'timestamp': datetime.now().isoformat()})
     except Exception as e:
         return jsonify({'error': f'Test failed: {str(e)}'}), 500
+
+# Get Supabase IP address
+@app.route('/api/get-supabase-ip')
+def get_supabase_ip():
+    try:
+        import subprocess
+        import re
+        
+        # Try to get IP address using nslookup or dig
+        host = 'db.jlcwxbkndfrtaoybvgsa.supabase.co'
+        
+        try:
+            # Try nslookup first
+            result = subprocess.run(['nslookup', host], capture_output=True, text=True, timeout=10)
+            if result.returncode == 0:
+                # Extract IP from nslookup output
+                ip_match = re.search(r'Address: (\d+\.\d+\.\d+\.\d+)', result.stdout)
+                if ip_match:
+                    ip = ip_match.group(1)
+                    return jsonify({
+                        'message': f'Found IP for {host}',
+                        'ip_address': ip,
+                        'method': 'nslookup'
+                    })
+        except:
+            pass
+        
+        # Fallback to socket method
+        import socket
+        ip = socket.gethostbyname(host)
+        return jsonify({
+            'message': f'Found IP for {host}',
+            'ip_address': ip,
+            'method': 'socket'
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'error': f'Could not resolve IP for {host}',
+            'details': str(e)
+        }), 500
 
 # Test hostname resolution
 @app.route('/api/test-hostname')
