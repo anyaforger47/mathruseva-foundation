@@ -1,0 +1,400 @@
+import os
+import psycopg2
+from flask import Flask, request, jsonify, render_template, redirect, url_for, session, send_file
+from flask_cors import CORS
+from functools import wraps
+from datetime import datetime
+
+app = Flask(__name__)
+CORS(app)
+
+# Secret key for session management
+app.secret_key = os.environ.get('SECRET_KEY', 'mathruseva_foundation_2024_secure_key')
+
+# PostgreSQL Configuration for Render
+POSTGRES_CONFIG = {
+    'host': os.environ.get('DB_HOST', 'localhost'),
+    'user': os.environ.get('DB_USER', 'mathruseva_user'),
+    'password': os.environ.get('DB_PASSWORD', ''),
+    'database': os.environ.get('DB_NAME', 'mathruseva_foundation')
+}
+
+def get_db_connection():
+    try:
+        return psycopg2.connect(**POSTGRES_CONFIG)
+    except Exception as e:
+        print(f"Database connection error: {e}")
+        return None
+
+# Authentication decorator
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'logged_in' not in session:
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+# Login route
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        
+        if username == 'admin' and password == 'admin123':
+            session['logged_in'] = True
+            session['username'] = username
+            return redirect(url_for('dashboard'))
+        else:
+            return render_template('login.html', error='Invalid username or password')
+    
+    return render_template('login.html')
+
+# Logout route
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
+
+# Dashboard (protected)
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    return render_template('index.html')
+
+# Serve login page as default
+@app.route('/')
+def index():
+    if 'logged_in' in session:
+        return redirect(url_for('dashboard'))
+    return redirect(url_for('login'))
+
+# Health check for Render
+@app.route('/health')
+def health():
+    return jsonify({'status': 'healthy'})
+
+# Database setup route
+@app.route('/setup-database')
+def setup_database():
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = conn.cursor()
+        
+        # Create tables
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS volunteers (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100) NOT NULL,
+                email VARCHAR(100) UNIQUE NOT NULL,
+                phone VARCHAR(20),
+                role VARCHAR(20) NOT NULL,
+                join_date DATE DEFAULT CURRENT_DATE,
+                status VARCHAR(20) DEFAULT 'Active'
+            )
+        """)
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS camps (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(200) NOT NULL,
+                type VARCHAR(50) NOT NULL,
+                location VARCHAR(200) NOT NULL,
+                camp_date DATE NOT NULL,
+                description TEXT,
+                status VARCHAR(20) DEFAULT 'Planned'
+            )
+        """)
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS donations (
+                id SERIAL PRIMARY KEY,
+                camp_id INTEGER,
+                donation_type VARCHAR(50) NOT NULL,
+                quantity INTEGER NOT NULL,
+                donor_name VARCHAR(100),
+                donation_date DATE NOT NULL,
+                notes TEXT
+            )
+        """)
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS medical_summary (
+                id SERIAL PRIMARY KEY,
+                camp_id INTEGER,
+                total_patients INTEGER DEFAULT 0,
+                eye_checkups INTEGER DEFAULT 0,
+                blood_donations INTEGER DEFAULT 0,
+                general_consultations INTEGER DEFAULT 0,
+                children_benefited INTEGER DEFAULT 0,
+                summary_date DATE DEFAULT CURRENT_DATE,
+                notes TEXT
+            )
+        """)
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        return jsonify({'message': 'PostgreSQL database setup completed successfully!'})
+        
+    except Exception as e:
+        return jsonify({'error': f'Database setup failed: {str(e)}'}), 500
+
+# Volunteer Management APIs
+@app.route('/api/volunteers', methods=['GET'])
+@login_required
+def get_volunteers():
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM volunteers ORDER BY join_date DESC")
+    
+    # Convert to dictionary format
+    columns = [desc[0] for desc in cursor.description]
+    volunteers = [dict(zip(columns, row)) for row in cursor.fetchall()]
+    
+    cursor.close()
+    conn.close()
+    return jsonify(volunteers)
+
+@app.route('/api/volunteers', methods=['POST'])
+@login_required
+def add_volunteer():
+    data = request.get_json()
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO volunteers (name, email, phone, role) 
+        VALUES (%s, %s, %s, %s)
+    """, (data['name'], data['email'], data['phone'], data['role']))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return jsonify({'message': 'Volunteer added successfully'})
+
+@app.route('/api/volunteers/<int:volunteer_id>', methods=['PUT'])
+@login_required
+def update_volunteer(volunteer_id):
+    data = request.get_json()
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE volunteers 
+        SET name = %s, email = %s, phone = %s, role = %s, status = %s
+        WHERE id = %s
+    """, (data['name'], data['email'], data['phone'], data['role'], data['status'], volunteer_id))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return jsonify({'message': 'Volunteer updated successfully'})
+
+@app.route('/api/volunteers/<int:volunteer_id>', methods=['DELETE'])
+@login_required
+def delete_volunteer(volunteer_id):
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM volunteers WHERE id = %s", (volunteer_id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return jsonify({'message': 'Volunteer deleted successfully'})
+
+# Camp Management APIs
+@app.route('/api/camps', methods=['GET'])
+@login_required
+def get_camps():
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM camps ORDER BY camp_date DESC")
+    
+    columns = [desc[0] for desc in cursor.description]
+    camps = [dict(zip(columns, row)) for row in cursor.fetchall()]
+    
+    cursor.close()
+    conn.close()
+    return jsonify(camps)
+
+@app.route('/api/camps', methods=['POST'])
+@login_required
+def add_camp():
+    data = request.get_json()
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO camps (name, type, location, camp_date, description) 
+        VALUES (%s, %s, %s, %s, %s)
+    """, (data['name'], data['type'], data['location'], data['camp_date'], data.get('description', '')))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return jsonify({'message': 'Camp added successfully'})
+
+@app.route('/api/camps/<int:camp_id>', methods=['PUT'])
+@login_required
+def update_camp(camp_id):
+    data = request.get_json()
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE camps 
+        SET name = %s, type = %s, location = %s, camp_date = %s, description = %s, status = %s
+        WHERE id = %s
+    """, (data['name'], data['type'], data['location'], data['camp_date'], data.get('description', ''), data.get('status', 'Planned'), camp_id))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return jsonify({'message': 'Camp updated successfully'})
+
+@app.route('/api/camps/<int:camp_id>', methods=['DELETE'])
+@login_required
+def delete_camp(camp_id):
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM camps WHERE id = %s", (camp_id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return jsonify({'message': 'Camp deleted successfully'})
+
+# Donation APIs
+@app.route('/api/donations', methods=['GET'])
+@login_required
+def get_donations():
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT d.*, c.name as camp_name 
+        FROM donations d 
+        LEFT JOIN camps c ON d.camp_id = c.id 
+        ORDER BY donation_date DESC
+    """)
+    
+    columns = [desc[0] for desc in cursor.description]
+    donations = [dict(zip(columns, row)) for row in cursor.fetchall()]
+    
+    cursor.close()
+    conn.close()
+    return jsonify(donations)
+
+@app.route('/api/donations', methods=['POST'])
+@login_required
+def add_donation():
+    data = request.get_json()
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO donations (camp_id, donation_type, quantity, donor_name, donation_date, notes)
+        VALUES (%s, %s, %s, %s, %s, %s)
+    """, (data.get('camp_id'), data['donation_type'], data['quantity'], 
+          data.get('donor_name', ''), data['donation_date'], data.get('notes', '')))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return jsonify({'message': 'Donation added successfully'})
+
+@app.route('/api/donations/<int:donation_id>', methods=['PUT'])
+@login_required
+def update_donation(donation_id):
+    data = request.get_json()
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE donations 
+        SET camp_id = %s, donation_type = %s, quantity = %s, donor_name = %s, donation_date = %s, notes = %s
+        WHERE id = %s
+    """, (data.get('camp_id'), data['donation_type'], data['quantity'], 
+          data.get('donor_name', ''), data['donation_date'], data.get('notes', ''), donation_id))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return jsonify({'message': 'Donation updated successfully'})
+
+@app.route('/api/donations/<int:donation_id>', methods=['DELETE'])
+@login_required
+def delete_donation(donation_id):
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM donations WHERE id = %s", (donation_id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return jsonify({'message': 'Donation deleted successfully'})
+
+# Analytics Dashboard APIs
+@app.route('/api/analytics/dashboard')
+@login_required
+def get_dashboard_analytics():
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT COUNT(*) as total FROM volunteers")
+    total_volunteers = cursor.fetchone()[0]
+    
+    cursor.execute("SELECT COUNT(*) as total FROM camps")
+    total_camps = cursor.fetchone()[0]
+    
+    cursor.execute("SELECT COALESCE(SUM(total_patients), 0) as total FROM medical_summary")
+    total_beneficiaries = cursor.fetchone()[0]
+    
+    cursor.execute("SELECT COALESCE(SUM(quantity), 0) as total FROM donations")
+    total_donations = cursor.fetchone()[0]
+    
+    cursor.execute("SELECT type, COUNT(*) as count FROM camps GROUP BY type")
+    camp_types_data = cursor.fetchall()
+    camp_types = [{'type': row[0], 'count': row[1]} for row in camp_types_data]
+    
+    cursor.execute("""
+        SELECT TO_CHAR(camp_date, 'YYYY-MM') as month, COUNT(*) as camps
+        FROM camps 
+        WHERE camp_date >= CURRENT_DATE - INTERVAL '12 months'
+        GROUP BY TO_CHAR(camp_date, 'YYYY-MM')
+        ORDER BY month
+    """)
+    monthly_data = cursor.fetchall()
+    monthly_trends = [{'month': row[0], 'camps': row[1]} for row in monthly_data]
+    
+    cursor.close()
+    conn.close()
+    
+    return jsonify({
+        'total_volunteers': total_volunteers,
+        'total_camps': total_camps,
+        'total_beneficiaries': total_beneficiaries,
+        'total_donations': total_donations,
+        'camp_types': camp_types,
+        'monthly_trends': monthly_trends
+    })
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
