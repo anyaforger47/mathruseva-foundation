@@ -98,6 +98,11 @@ def test_database():
     except Exception as e:
         return jsonify({'error': f'Database test failed: {str(e)}'}), 500
 
+# New test endpoint to force deployment
+@app.route('/api/version')
+def version_check():
+    return jsonify({'version': '2.0', 'database': 'postgresql', 'timestamp': datetime.now().isoformat()})
+
 # Health check for Render
 @app.route('/health')
 def health():
