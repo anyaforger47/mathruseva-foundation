@@ -97,6 +97,35 @@ def test_api():
     except Exception as e:
         return jsonify({'error': f'Test failed: {str(e)}'}), 500
 
+# Test hostname resolution
+@app.route('/api/test-hostname')
+def test_hostname():
+    try:
+        import socket
+        host = 'db.jlcwxbkndfrtaoybvgsa.supabase.co'
+        
+        print(f"=== HOSTNAME RESOLUTION TEST ===")
+        print(f"Testing hostname: {host}")
+        
+        # Try to resolve hostname
+        ip_address = socket.gethostbyname(host)
+        print(f"✅ Hostname resolved to: {ip_address}")
+        
+        return jsonify({
+            'message': f'Hostname {host} resolved successfully',
+            'ip_address': ip_address
+        })
+        
+    except socket.gaierror as e:
+        print(f"❌ Hostname resolution failed: {str(e)}")
+        return jsonify({
+            'error': f'Hostname resolution failed for {host}',
+            'details': str(e)
+        }), 500
+    except Exception as e:
+        print(f"❌ Hostname test failed: {str(e)}")
+        return jsonify({'error': f'Hostname test failed: {str(e)}'}), 500
+
 # Test network connectivity to Supabase
 @app.route('/api/test-network')
 def test_network():
