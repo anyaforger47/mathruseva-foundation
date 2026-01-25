@@ -71,6 +71,33 @@ def index():
         return redirect(url_for('dashboard'))
     return redirect(url_for('login'))
 
+# Simple test API to debug the issue
+@app.route('/api/test')
+def test_api():
+    try:
+        # Test basic response
+        return jsonify({'message': 'API is working!', 'timestamp': datetime.now().isoformat()})
+    except Exception as e:
+        return jsonify({'error': f'Test failed: {str(e)}'}), 500
+
+# Test database connection
+@app.route('/api/test-db')
+def test_database():
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1 as test")
+        result = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        
+        return jsonify({'message': 'Database connection working!', 'result': result[0]})
+    except Exception as e:
+        return jsonify({'error': f'Database test failed: {str(e)}'}), 500
+
 # Health check for Render
 @app.route('/health')
 def health():
@@ -131,6 +158,61 @@ def setup_database():
         
     except Exception as e:
         return jsonify({'error': f'Database setup failed: {str(e)}'}), 500
+
+# Simple volunteer test (no login required)
+@app.route('/api/test-volunteers')
+def test_volunteers():
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({'error': 'Database connection failed'}), 500
+            
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM volunteers ORDER BY join_date DESC")
+        
+        columns = [desc[0] for desc in cursor.description]
+        volunteers = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        
+        cursor.close()
+        conn.close()
+        return jsonify({'message': f'Found {len(volunteers)} volunteers', 'data': volunteers})
+        
+    except Exception as e:
+        return jsonify({'error': f'Volunteer test failed: {str(e)}'}), 500
+
+# Simple add volunteer test (no login required)
+@app.route('/api/test-add-volunteer', methods=['POST'])
+def test_add_volunteer():
+    try:
+        data = request.get_json()
+        if not data:
+            data = {
+                'name': 'Test Volunteer',
+                'email': 'test@example.com',
+                'phone': '1234567890',
+                'role': 'Doctor'
+            }
+        
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({'error': 'Database connection failed'}), 500
+            
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO volunteers (name, email, phone, role) 
+            VALUES (%s, %s, %s, %s)
+            RETURNING id
+        """, (data['name'], data['email'], data['phone'], data['role']))
+        
+        volunteer_id = cursor.fetchone()[0]
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        return jsonify({'message': f'Test volunteer added with ID: {volunteer_id}', 'id': volunteer_id})
+        
+    except Exception as e:
+        return jsonify({'error': f'Add volunteer test failed: {str(e)}'}), 500
 
 # Volunteer Management APIs
 @app.route('/api/volunteers', methods=['GET'])
