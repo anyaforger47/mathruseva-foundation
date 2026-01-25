@@ -20,6 +20,15 @@ POSTGRES_CONFIG = {
     'port': 5432
 }
 
+# Debug environment variables
+print("=== ENVIRONMENT VARIABLES DEBUG ===")
+print(f"DB_HOST: '{os.environ.get('DB_HOST', 'NOT_SET')}'")
+print(f"DB_USER: '{os.environ.get('DB_USER', 'NOT_SET')}'")
+print(f"DB_PASSWORD: '{os.environ.get('DB_PASSWORD', 'NOT_SET')}'")
+print(f"DB_NAME: '{os.environ.get('DB_NAME', 'NOT_SET')}'")
+print(f"SECRET_KEY: '{os.environ.get('SECRET_KEY', 'NOT_SET')}'")
+print("=== END DEBUG ===")
+
 def get_db_connection():
     try:
         print(f"Attempting to connect to: {POSTGRES_CONFIG['host']}")
