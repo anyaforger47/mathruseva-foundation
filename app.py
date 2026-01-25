@@ -11,7 +11,7 @@ CORS(app)
 # Secret key for session management
 app.secret_key = os.environ.get('SECRET_KEY', 'mathruseva_foundation_2024_secure_key')
 
-# PostgreSQL Configuration for Render
+# PostgreSQL Configuration for Render - FIXED VERSION
 POSTGRES_CONFIG = {
     'host': os.environ.get('DB_HOST', 'localhost'),
     'user': os.environ.get('DB_USER', 'mathruseva_user'),
