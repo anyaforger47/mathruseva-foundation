@@ -136,19 +136,27 @@ def setup_database():
 @app.route('/api/volunteers', methods=['GET'])
 @login_required
 def get_volunteers():
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({'error': 'Database connection failed'}), 500
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM volunteers ORDER BY join_date DESC")
-    
-    # Convert to dictionary format
-    columns = [desc[0] for desc in cursor.description]
-    volunteers = [dict(zip(columns, row)) for row in cursor.fetchall()]
-    
-    cursor.close()
-    conn.close()
-    return jsonify(volunteers)
+    try:
+        conn = get_db_connection()
+        if not conn:
+            print("Database connection failed for volunteers")
+            return jsonify({'error': 'Database connection failed'}), 500
+            
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM volunteers ORDER BY join_date DESC")
+        
+        # Convert to dictionary format
+        columns = [desc[0] for desc in cursor.description]
+        volunteers = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        
+        cursor.close()
+        conn.close()
+        print(f"Successfully loaded {len(volunteers)} volunteers")
+        return jsonify(volunteers)
+        
+    except Exception as e:
+        print(f"Error loading volunteers: {str(e)}")
+        return jsonify({'error': f'Failed to load volunteers: {str(e)}'}), 500
 
 @app.route('/api/volunteers', methods=['POST'])
 @login_required
@@ -216,18 +224,26 @@ def delete_volunteer(volunteer_id):
 @app.route('/api/camps', methods=['GET'])
 @login_required
 def get_camps():
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({'error': 'Database connection failed'}), 500
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM camps ORDER BY camp_date DESC")
-    
-    columns = [desc[0] for desc in cursor.description]
-    camps = [dict(zip(columns, row)) for row in cursor.fetchall()]
-    
-    cursor.close()
-    conn.close()
-    return jsonify(camps)
+    try:
+        conn = get_db_connection()
+        if not conn:
+            print("Database connection failed for camps")
+            return jsonify({'error': 'Database connection failed'}), 500
+            
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM camps ORDER BY camp_date DESC")
+        
+        columns = [desc[0] for desc in cursor.description]
+        camps = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        
+        cursor.close()
+        conn.close()
+        print(f"Successfully loaded {len(camps)} camps")
+        return jsonify(camps)
+        
+    except Exception as e:
+        print(f"Error loading camps: {str(e)}")
+        return jsonify({'error': f'Failed to load camps: {str(e)}'}), 500
 
 @app.route('/api/camps', methods=['POST'])
 @login_required
@@ -295,23 +311,31 @@ def delete_camp(camp_id):
 @app.route('/api/donations', methods=['GET'])
 @login_required
 def get_donations():
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({'error': 'Database connection failed'}), 500
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT d.*, c.name as camp_name 
-        FROM donations d 
-        LEFT JOIN camps c ON d.camp_id = c.id 
-        ORDER BY donation_date DESC
-    """)
-    
-    columns = [desc[0] for desc in cursor.description]
-    donations = [dict(zip(columns, row)) for row in cursor.fetchall()]
-    
-    cursor.close()
-    conn.close()
-    return jsonify(donations)
+    try:
+        conn = get_db_connection()
+        if not conn:
+            print("Database connection failed for donations")
+            return jsonify({'error': 'Database connection failed'}), 500
+            
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT d.*, c.name as camp_name 
+            FROM donations d 
+            LEFT JOIN camps c ON d.camp_id = c.id 
+            ORDER BY donation_date DESC
+        """)
+        
+        columns = [desc[0] for desc in cursor.description]
+        donations = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        
+        cursor.close()
+        conn.close()
+        print(f"Successfully loaded {len(donations)} donations")
+        return jsonify(donations)
+        
+    except Exception as e:
+        print(f"Error loading donations: {str(e)}")
+        return jsonify({'error': f'Failed to load donations: {str(e)}'}), 500
 
 @app.route('/api/donations', methods=['POST'])
 @login_required
@@ -381,48 +405,60 @@ def delete_donation(donation_id):
 @app.route('/api/analytics/dashboard')
 @login_required
 def get_dashboard_analytics():
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({'error': 'Database connection failed'}), 500
-    cursor = conn.cursor()
-    
-    cursor.execute("SELECT COUNT(*) as total FROM volunteers")
-    total_volunteers = cursor.fetchone()[0]
-    
-    cursor.execute("SELECT COUNT(*) as total FROM camps")
-    total_camps = cursor.fetchone()[0]
-    
-    cursor.execute("SELECT COALESCE(SUM(total_patients), 0) as total FROM medical_summary")
-    total_beneficiaries = cursor.fetchone()[0]
-    
-    cursor.execute("SELECT COALESCE(SUM(quantity), 0) as total FROM donations")
-    total_donations = cursor.fetchone()[0]
-    
-    cursor.execute("SELECT type, COUNT(*) as count FROM camps GROUP BY type")
-    camp_types_data = cursor.fetchall()
-    camp_types = [{'type': row[0], 'count': row[1]} for row in camp_types_data]
-    
-    cursor.execute("""
-        SELECT TO_CHAR(camp_date, 'YYYY-MM') as month, COUNT(*) as camps
-        FROM camps 
-        WHERE camp_date >= CURRENT_DATE - INTERVAL '12 months'
-        GROUP BY TO_CHAR(camp_date, 'YYYY-MM')
-        ORDER BY month
-    """)
-    monthly_data = cursor.fetchall()
-    monthly_trends = [{'month': row[0], 'camps': row[1]} for row in monthly_data]
-    
-    cursor.close()
-    conn.close()
-    
-    return jsonify({
-        'total_volunteers': total_volunteers,
-        'total_camps': total_camps,
-        'total_beneficiaries': total_beneficiaries,
-        'total_donations': total_donations,
-        'camp_types': camp_types,
-        'monthly_trends': monthly_trends
-    })
+    try:
+        conn = get_db_connection()
+        if not conn:
+            print("Database connection failed for analytics")
+            return jsonify({'error': 'Database connection failed'}), 500
+            
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT COUNT(*) as total FROM volunteers")
+        total_volunteers = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) as total FROM camps")
+        total_camps = cursor.fetchone()[0]
+        
+        # Handle medical_summary table that might not exist
+        try:
+            cursor.execute("SELECT COALESCE(SUM(total_patients), 0) as total FROM medical_summary")
+            total_beneficiaries = cursor.fetchone()[0]
+        except:
+            total_beneficiaries = 0
+        
+        cursor.execute("SELECT COALESCE(SUM(quantity), 0) as total FROM donations")
+        total_donations = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT type, COUNT(*) as count FROM camps GROUP BY type")
+        camp_types_data = cursor.fetchall()
+        camp_types = [{'type': row[0], 'count': row[1]} for row in camp_types_data]
+        
+        cursor.execute("""
+            SELECT TO_CHAR(camp_date, 'YYYY-MM') as month, COUNT(*) as camps
+            FROM camps 
+            WHERE camp_date >= CURRENT_DATE - INTERVAL '12 months'
+            GROUP BY TO_CHAR(camp_date, 'YYYY-MM')
+            ORDER BY month
+        """)
+        monthly_data = cursor.fetchall()
+        monthly_trends = [{'month': row[0], 'camps': row[1]} for row in monthly_data]
+        
+        cursor.close()
+        conn.close()
+        
+        print(f"Analytics loaded: {total_volunteers} volunteers, {total_camps} camps")
+        return jsonify({
+            'total_volunteers': total_volunteers,
+            'total_camps': total_camps,
+            'total_beneficiaries': total_beneficiaries,
+            'total_donations': total_donations,
+            'camp_types': camp_types,
+            'monthly_trends': monthly_trends
+        })
+        
+    except Exception as e:
+        print(f"Error loading analytics: {str(e)}")
+        return jsonify({'error': f'Failed to load analytics: {str(e)}'}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
