@@ -107,21 +107,19 @@ def health():
 @app.route('/setup-database')
 def setup_database():
     try:
+        print("Starting database setup...")
         conn = get_db_connection()
         if not conn:
+            print("❌ Database connection failed")
             return jsonify({'error': 'Database connection failed'}), 500
         
+        print("✅ Database connected successfully")
         cursor = conn.cursor()
         
-        # Drop existing tables to start fresh
-        cursor.execute("DROP TABLE IF EXISTS donations CASCADE")
-        cursor.execute("DROP TABLE IF EXISTS medical_summary CASCADE")
-        cursor.execute("DROP TABLE IF EXISTS camps CASCADE")
-        cursor.execute("DROP TABLE IF EXISTS volunteers CASCADE")
-        
-        # Create volunteers table
+        # Create volunteers table first
+        print("Creating volunteers table...")
         cursor.execute("""
-            CREATE TABLE volunteers (
+            CREATE TABLE IF NOT EXISTS volunteers (
                 id SERIAL PRIMARY KEY,
                 name VARCHAR(100) NOT NULL,
                 email VARCHAR(100) UNIQUE NOT NULL,
@@ -131,10 +129,12 @@ def setup_database():
                 status VARCHAR(20) DEFAULT 'Active'
             )
         """)
+        print("✅ Volunteers table created")
         
         # Create camps table
+        print("Creating camps table...")
         cursor.execute("""
-            CREATE TABLE camps (
+            CREATE TABLE IF NOT EXISTS camps (
                 id SERIAL PRIMARY KEY,
                 name VARCHAR(200) NOT NULL,
                 type VARCHAR(50) NOT NULL,
@@ -144,12 +144,14 @@ def setup_database():
                 status VARCHAR(20) DEFAULT 'Planned'
             )
         """)
+        print("✅ Camps table created")
         
         # Create donations table
+        print("Creating donations table...")
         cursor.execute("""
-            CREATE TABLE donations (
+            CREATE TABLE IF NOT EXISTS donations (
                 id SERIAL PRIMARY KEY,
-                camp_id INTEGER REFERENCES camps(id) ON DELETE SET NULL,
+                camp_id INTEGER,
                 donation_type VARCHAR(50) NOT NULL,
                 quantity INTEGER NOT NULL,
                 donor_name VARCHAR(100),
@@ -157,12 +159,14 @@ def setup_database():
                 notes TEXT
             )
         """)
+        print("✅ Donations table created")
         
         # Create medical_summary table
+        print("Creating medical_summary table...")
         cursor.execute("""
-            CREATE TABLE medical_summary (
+            CREATE TABLE IF NOT EXISTS medical_summary (
                 id SERIAL PRIMARY KEY,
-                camp_id INTEGER REFERENCES camps(id) ON DELETE CASCADE,
+                camp_id INTEGER,
                 total_patients INTEGER DEFAULT 0,
                 eye_checkups INTEGER DEFAULT 0,
                 blood_donations INTEGER DEFAULT 0,
@@ -172,20 +176,40 @@ def setup_database():
                 notes TEXT
             )
         """)
+        print("✅ Medical_summary table created")
         
-        # Insert sample data to test
+        # Insert sample data
+        print("Inserting sample data...")
         cursor.execute("""
             INSERT INTO volunteers (name, email, phone, role) 
             VALUES ('Test Volunteer', 'test@example.com', '1234567890', 'Doctor')
+            ON CONFLICT (email) DO NOTHING
         """)
+        print("✅ Sample data inserted")
         
+        # Commit the transaction
         conn.commit()
+        print("✅ Transaction committed")
+        
+        # Verify tables exist
+        cursor.execute("""
+            SELECT table_name FROM information_schema.tables 
+            WHERE table_schema = 'public'
+        """)
+        tables = [row[0] for row in cursor.fetchall()]
+        print(f"✅ Tables found: {tables}")
+        
         cursor.close()
         conn.close()
         
-        return jsonify({'message': 'PostgreSQL database setup completed successfully! Tables created with sample data.'})
+        return jsonify({
+            'message': 'Database setup completed successfully!', 
+            'tables_created': tables,
+            'sample_data_added': True
+        })
         
     except Exception as e:
+        print(f"❌ Database setup failed: {str(e)}")
         return jsonify({'error': f'Database setup failed: {str(e)}'}), 500
 
 # Simple volunteer test (no login required)
