@@ -12,14 +12,23 @@ CORS(app)
 app.secret_key = os.environ.get('SECRET_KEY', 'mathruseva_foundation_2024_secure_key')
 
 # PostgreSQL Configuration for Render - FIXED VERSION
-# Use known Supabase IP address due to DNS resolution issues
+# Try multiple Supabase IP addresses due to DNS resolution issues
 POSTGRES_CONFIG = {
-    'host': '34.136.197.140',  # Known Supabase IP address
+    'host': '34.136.197.140',  # Try this first
     'user': os.environ.get('DB_USER', 'mathruseva_user'),
     'password': os.environ.get('DB_PASSWORD', ''),
     'database': os.environ.get('DB_NAME', 'mathruseva_foundation'),
-    'port': 5432
+    'port': 5432,
+    'connect_timeout': 10  # Add timeout
 }
+
+# Alternative IPs to try if this doesn't work
+SUPABASE_IPS = [
+    '34.136.197.140',
+    '34.136.197.141',
+    '34.136.197.142',
+    '34.136.197.143'
+]
 
 # Debug environment variables
 print("=== ENVIRONMENT VARIABLES DEBUG ===")
@@ -97,6 +106,51 @@ def test_api():
         return jsonify({'message': 'API is working!', 'timestamp': datetime.now().isoformat()})
     except Exception as e:
         return jsonify({'error': f'Test failed: {str(e)}'}), 500
+
+# Test multiple Supabase IPs
+@app.route('/api/test-multiple-ips')
+def test_multiple_ips():
+    results = []
+    
+    for ip in SUPABASE_IPS:
+        try:
+            print(f"=== TESTING IP: {ip} ===")
+            
+            config = {
+                'host': ip,
+                'user': os.environ.get('DB_USER', 'postgres'),
+                'password': os.environ.get('DB_PASSWORD', ''),
+                'database': os.environ.get('DB_NAME', 'postgres'),
+                'port': 5432,
+                'connect_timeout': 5
+            }
+            
+            conn = psycopg2.connect(**config)
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1")
+            result = cursor.fetchone()
+            cursor.close()
+            conn.close()
+            
+            results.append({
+                'ip': ip,
+                'status': 'success',
+                'message': f'Connected successfully to {ip}'
+            })
+            print(f"✅ SUCCESS: {ip}")
+            
+        except Exception as e:
+            results.append({
+                'ip': ip,
+                'status': 'failed',
+                'error': str(e)
+            })
+            print(f"❌ FAILED: {ip} - {str(e)}")
+    
+    return jsonify({
+        'message': 'IP testing completed',
+        'results': results
+    })
 
 # Get Supabase IP address
 @app.route('/api/get-supabase-ip')
