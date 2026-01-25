@@ -113,9 +113,15 @@ def setup_database():
         
         cursor = conn.cursor()
         
-        # Create tables
+        # Drop existing tables to start fresh
+        cursor.execute("DROP TABLE IF EXISTS donations CASCADE")
+        cursor.execute("DROP TABLE IF EXISTS medical_summary CASCADE")
+        cursor.execute("DROP TABLE IF EXISTS camps CASCADE")
+        cursor.execute("DROP TABLE IF EXISTS volunteers CASCADE")
+        
+        # Create volunteers table
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS volunteers (
+            CREATE TABLE volunteers (
                 id SERIAL PRIMARY KEY,
                 name VARCHAR(100) NOT NULL,
                 email VARCHAR(100) UNIQUE NOT NULL,
@@ -126,8 +132,9 @@ def setup_database():
             )
         """)
         
+        # Create camps table
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS camps (
+            CREATE TABLE camps (
                 id SERIAL PRIMARY KEY,
                 name VARCHAR(200) NOT NULL,
                 type VARCHAR(50) NOT NULL,
@@ -138,10 +145,11 @@ def setup_database():
             )
         """)
         
+        # Create donations table
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS donations (
+            CREATE TABLE donations (
                 id SERIAL PRIMARY KEY,
-                camp_id INTEGER,
+                camp_id INTEGER REFERENCES camps(id) ON DELETE SET NULL,
                 donation_type VARCHAR(50) NOT NULL,
                 quantity INTEGER NOT NULL,
                 donor_name VARCHAR(100),
@@ -150,11 +158,32 @@ def setup_database():
             )
         """)
         
+        # Create medical_summary table
+        cursor.execute("""
+            CREATE TABLE medical_summary (
+                id SERIAL PRIMARY KEY,
+                camp_id INTEGER REFERENCES camps(id) ON DELETE CASCADE,
+                total_patients INTEGER DEFAULT 0,
+                eye_checkups INTEGER DEFAULT 0,
+                blood_donations INTEGER DEFAULT 0,
+                general_consultations INTEGER DEFAULT 0,
+                children_benefited INTEGER DEFAULT 0,
+                summary_date DATE DEFAULT CURRENT_DATE,
+                notes TEXT
+            )
+        """)
+        
+        # Insert sample data to test
+        cursor.execute("""
+            INSERT INTO volunteers (name, email, phone, role) 
+            VALUES ('Test Volunteer', 'test@example.com', '1234567890', 'Doctor')
+        """)
+        
         conn.commit()
         cursor.close()
         conn.close()
         
-        return jsonify({'message': 'PostgreSQL database setup completed successfully!'})
+        return jsonify({'message': 'PostgreSQL database setup completed successfully! Tables created with sample data.'})
         
     except Exception as e:
         return jsonify({'error': f'Database setup failed: {str(e)}'}), 500
