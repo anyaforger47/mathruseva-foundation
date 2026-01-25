@@ -22,9 +22,17 @@ POSTGRES_CONFIG = {
 
 def get_db_connection():
     try:
-        return psycopg2.connect(**POSTGRES_CONFIG)
+        print(f"Attempting to connect to: {POSTGRES_CONFIG['host']}")
+        print(f"User: {POSTGRES_CONFIG['user']}")
+        print(f"Database: {POSTGRES_CONFIG['database']}")
+        print(f"Port: {POSTGRES_CONFIG['port']}")
+        
+        conn = psycopg2.connect(**POSTGRES_CONFIG)
+        print("✅ Database connection successful!")
+        return conn
     except Exception as e:
-        print(f"Database connection error: {e}")
+        print(f"❌ Database connection error: {e}")
+        print(f"❌ Full config: {POSTGRES_CONFIG}")
         return None
 
 # Authentication decorator
