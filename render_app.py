@@ -17,11 +17,16 @@ MYSQL_CONFIG = {
     'host': os.environ.get('DB_HOST', 'localhost'),
     'user': os.environ.get('DB_USER', 'root'),
     'password': os.environ.get('DB_PASSWORD', 'NehaJ@447747'),
-    'database': os.environ.get('DB_NAME', 'mathruseva_foundation')
+    'database': os.environ.get('DB_NAME', 'mathruseva_foundation'),
+    'autocommit': True
 }
 
 def get_db_connection():
-    return mysql.connector.connect(**MYSQL_CONFIG)
+    try:
+        return mysql.connector.connect(**MYSQL_CONFIG)
+    except Exception as e:
+        print(f"Database connection error: {e}")
+        return None
 
 # Authentication decorator
 def login_required(f):
@@ -72,11 +77,89 @@ def index():
 def health():
     return jsonify({'status': 'healthy'})
 
+# Database setup route
+@app.route('/setup-database')
+def setup_database():
+    try:
+        # Connect to MySQL server (without database)
+        config = MYSQL_CONFIG.copy()
+        if 'database' in config:
+            del config['database']
+        
+        conn = mysql.connector.connect(**config)
+        cursor = conn.cursor()
+        
+        # Create database if it doesn't exist
+        cursor.execute(f"CREATE DATABASE IF NOT EXISTS {MYSQL_CONFIG['database']}")
+        cursor.execute(f"USE {MYSQL_CONFIG['database']}")
+        
+        # Create tables
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS volunteers (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(100) NOT NULL,
+                email VARCHAR(100) UNIQUE NOT NULL,
+                phone VARCHAR(20),
+                role VARCHAR(20) NOT NULL,
+                join_date DATE DEFAULT (CURRENT_DATE),
+                status VARCHAR(20) DEFAULT 'Active'
+            )
+        """)
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS camps (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(200) NOT NULL,
+                type VARCHAR(50) NOT NULL,
+                location VARCHAR(200) NOT NULL,
+                camp_date DATE NOT NULL,
+                description TEXT,
+                status VARCHAR(20) DEFAULT 'Planned'
+            )
+        """)
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS donations (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                camp_id INT,
+                donation_type VARCHAR(50) NOT NULL,
+                quantity INT NOT NULL,
+                donor_name VARCHAR(100),
+                donation_date DATE NOT NULL,
+                notes TEXT
+            )
+        """)
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS medical_summary (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                camp_id INT,
+                total_patients INT DEFAULT 0,
+                eye_checkups INT DEFAULT 0,
+                blood_donations INT DEFAULT 0,
+                general_consultations INT DEFAULT 0,
+                children_benefited INT DEFAULT 0,
+                summary_date DATE DEFAULT (CURRENT_DATE),
+                notes TEXT
+            )
+        """)
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        return jsonify({'message': 'Database setup completed successfully!'})
+        
+    except Exception as e:
+        return jsonify({'error': f'Database setup failed: {str(e)}'}), 500
+
 # Volunteer Management APIs
 @app.route('/api/volunteers', methods=['GET'])
 @login_required
 def get_volunteers():
     conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
     cur = conn.cursor(dictionary=True)
     cur.execute("SELECT * FROM volunteers ORDER BY join_date DESC")
     volunteers = cur.fetchall()
@@ -89,6 +172,8 @@ def get_volunteers():
 def add_volunteer():
     data = request.get_json()
     conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
     cur = conn.cursor()
     cur.execute("""
         INSERT INTO volunteers (name, email, phone, role) 
