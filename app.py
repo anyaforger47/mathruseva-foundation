@@ -97,6 +97,33 @@ def test_api():
     except Exception as e:
         return jsonify({'error': f'Test failed: {str(e)}'}), 500
 
+# Test network connectivity to Supabase
+@app.route('/api/test-network')
+def test_network():
+    try:
+        import socket
+        host = 'db.jlcwxbkndfrtaoybvgsa.supabase.co'
+        port = 5432
+        
+        print(f"=== NETWORK TEST START ===")
+        print(f"Testing connection to {host}:{port}")
+        
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(10)
+        result = sock.connect_ex((host, port))
+        sock.close()
+        
+        if result == 0:
+            print(f"✅ Network connection successful to {host}:{port}")
+            return jsonify({'message': f'Network connection successful to {host}:{port}', 'result': 'success'})
+        else:
+            print(f"❌ Network connection failed to {host}:{port} - Error code: {result}")
+            return jsonify({'error': f'Network connection failed to {host}:{port}', 'error_code': result}), 500
+            
+    except Exception as e:
+        print(f"❌ Network test failed: {str(e)}")
+        return jsonify({'error': f'Network test failed: {str(e)}'}), 500
+
 # Test database connection
 @app.route('/api/test-db')
 def test_database():
