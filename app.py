@@ -153,19 +153,33 @@ def get_volunteers():
 @app.route('/api/volunteers', methods=['POST'])
 @login_required
 def add_volunteer():
-    data = request.get_json()
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({'error': 'Database connection failed'}), 500
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO volunteers (name, email, phone, role) 
-        VALUES (%s, %s, %s, %s)
-    """, (data['name'], data['email'], data['phone'], data['role']))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    return jsonify({'message': 'Volunteer added successfully'})
+    try:
+        data = request.get_json()
+        print(f"Received volunteer data: {data}")
+        
+        conn = get_db_connection()
+        if not conn:
+            print("Database connection failed")
+            return jsonify({'error': 'Database connection failed'}), 500
+            
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO volunteers (name, email, phone, role) 
+            VALUES (%s, %s, %s, %s)
+            RETURNING id
+        """, (data['name'], data['email'], data['phone'], data['role']))
+        
+        volunteer_id = cursor.fetchone()[0]
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        print(f"Successfully added volunteer with ID: {volunteer_id}")
+        return jsonify({'message': 'Volunteer added successfully', 'id': volunteer_id})
+        
+    except Exception as e:
+        print(f"Error adding volunteer: {str(e)}")
+        return jsonify({'error': f'Failed to add volunteer: {str(e)}'}), 500
 
 @app.route('/api/volunteers/<int:volunteer_id>', methods=['PUT'])
 @login_required
@@ -218,19 +232,33 @@ def get_camps():
 @app.route('/api/camps', methods=['POST'])
 @login_required
 def add_camp():
-    data = request.get_json()
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({'error': 'Database connection failed'}), 500
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO camps (name, type, location, camp_date, description) 
-        VALUES (%s, %s, %s, %s, %s)
-    """, (data['name'], data['type'], data['location'], data['camp_date'], data.get('description', '')))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    return jsonify({'message': 'Camp added successfully'})
+    try:
+        data = request.get_json()
+        print(f"Received camp data: {data}")
+        
+        conn = get_db_connection()
+        if not conn:
+            print("Database connection failed")
+            return jsonify({'error': 'Database connection failed'}), 500
+            
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO camps (name, type, location, camp_date, description) 
+            VALUES (%s, %s, %s, %s, %s)
+            RETURNING id
+        """, (data['name'], data['type'], data['location'], data['camp_date'], data.get('description', '')))
+        
+        camp_id = cursor.fetchone()[0]
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        print(f"Successfully added camp with ID: {camp_id}")
+        return jsonify({'message': 'Camp added successfully', 'id': camp_id})
+        
+    except Exception as e:
+        print(f"Error adding camp: {str(e)}")
+        return jsonify({'error': f'Failed to add camp: {str(e)}'}), 500
 
 @app.route('/api/camps/<int:camp_id>', methods=['PUT'])
 @login_required
@@ -288,20 +316,34 @@ def get_donations():
 @app.route('/api/donations', methods=['POST'])
 @login_required
 def add_donation():
-    data = request.get_json()
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({'error': 'Database connection failed'}), 500
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO donations (camp_id, donation_type, quantity, donor_name, donation_date, notes)
-        VALUES (%s, %s, %s, %s, %s, %s)
-    """, (data.get('camp_id'), data['donation_type'], data['quantity'], 
-          data.get('donor_name', ''), data['donation_date'], data.get('notes', '')))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    return jsonify({'message': 'Donation added successfully'})
+    try:
+        data = request.get_json()
+        print(f"Received donation data: {data}")
+        
+        conn = get_db_connection()
+        if not conn:
+            print("Database connection failed")
+            return jsonify({'error': 'Database connection failed'}), 500
+            
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO donations (camp_id, donation_type, quantity, donor_name, donation_date, notes)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """, (data.get('camp_id'), data['donation_type'], data['quantity'], 
+              data.get('donor_name', ''), data['donation_date'], data.get('notes', '')))
+        
+        donation_id = cursor.fetchone()[0]
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        print(f"Successfully added donation with ID: {donation_id}")
+        return jsonify({'message': 'Donation added successfully', 'id': donation_id})
+        
+    except Exception as e:
+        print(f"Error adding donation: {str(e)}")
+        return jsonify({'error': f'Failed to add donation: {str(e)}'}), 500
 
 @app.route('/api/donations/<int:donation_id>', methods=['PUT'])
 @login_required
