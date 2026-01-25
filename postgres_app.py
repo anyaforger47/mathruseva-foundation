@@ -16,7 +16,8 @@ POSTGRES_CONFIG = {
     'host': os.environ.get('DB_HOST', 'localhost'),
     'user': os.environ.get('DB_USER', 'mathruseva_user'),
     'password': os.environ.get('DB_PASSWORD', ''),
-    'database': os.environ.get('DB_NAME', 'mathruseva_foundation')
+    'database': os.environ.get('DB_NAME', 'mathruseva_foundation'),
+    'port': 5432
 }
 
 def get_db_connection():

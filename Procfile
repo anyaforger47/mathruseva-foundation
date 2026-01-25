@@ -1,1 +1,1 @@
-web: python postgres_app.py
+web: python app.py
