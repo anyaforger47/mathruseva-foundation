@@ -264,7 +264,19 @@ def test_database():
         print("✅ Connection object created successfully")
         
         cursor = conn.cursor()
-        print("✅ Cursor created successfully")
+        # Create media table for camp photos and videos
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS camp_media (
+                id SERIAL PRIMARY KEY,
+                camp_id INTEGER REFERENCES camps(id) ON DELETE CASCADE,
+                media_type VARCHAR(10) NOT NULL, -- 'photo' or 'video'
+                media_url VARCHAR(500) NOT NULL,
+                caption TEXT,
+                upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        print("✅ Tables created successfully")
         
         cursor.execute("SELECT 1 as test")
         print("✅ Query executed successfully")
@@ -379,6 +391,20 @@ def setup_database():
             )
         """)
         print("✅ Medical_summary table created")
+        
+        # Create media table for camp photos and videos
+        print("Creating media table...")
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS camp_media (
+                id SERIAL PRIMARY KEY,
+                camp_id INTEGER REFERENCES camps(id) ON DELETE CASCADE,
+                media_type VARCHAR(10) NOT NULL, -- 'photo' or 'video'
+                media_url VARCHAR(500) NOT NULL,
+                caption TEXT,
+                upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        print("✅ Media table created")
         
         # Insert sample data
         print("Inserting sample data...")
@@ -982,6 +1008,145 @@ def generate_pdf_report():
     except Exception as e:
         print(f"Error generating PDF: {str(e)}")
         return jsonify({'error': f'Failed to generate PDF: {str(e)}'}), 500
+
+# Media Management APIs
+@app.route('/api/media/upload', methods=['POST'])
+@login_required
+def upload_media():
+    try:
+        data = request.get_json()
+        camp_id = data.get('camp_id')
+        media_type = data.get('media_type')  # 'photo' or 'video'
+        media_url = data.get('media_url')
+        caption = data.get('caption', '')
+        
+        if not camp_id or not media_type or not media_url:
+            return jsonify({'error': 'Missing required fields'}), 400
+        
+        if media_type not in ['photo', 'video']:
+            return jsonify({'error': 'Invalid media type'}), 400
+        
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({'error': 'Database connection failed'}), 500
+            
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO camp_media (camp_id, media_type, media_url, caption)
+            VALUES (%s, %s, %s, %s)
+            RETURNING id
+        """, (camp_id, media_type, media_url, caption))
+        
+        media_id = cursor.fetchone()[0]
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        return jsonify({'message': 'Media uploaded successfully', 'id': media_id})
+        
+    except Exception as e:
+        print(f"Error uploading media: {str(e)}")
+        return jsonify({'error': f'Failed to upload media: {str(e)}'}), 500
+
+@app.route('/api/media/camp/<int:camp_id>', methods=['GET'])
+@login_required
+def get_camp_media(camp_id):
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({'error': 'Database connection failed'}), 500
+            
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, media_type, media_url, caption, upload_date
+            FROM camp_media 
+            WHERE camp_id = %s 
+            ORDER BY upload_date DESC
+        """, (camp_id,))
+        
+        media_items = []
+        for row in cursor.fetchall():
+            media_items.append({
+                'id': row[0],
+                'media_type': row[1],
+                'media_url': row[2],
+                'caption': row[3],
+                'upload_date': row[4].isoformat() if row[4] else None
+            })
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({'media': media_items})
+        
+    except Exception as e:
+        print(f"Error fetching camp media: {str(e)}")
+        return jsonify({'error': f'Failed to fetch media: {str(e)}'}), 500
+
+@app.route('/api/media/all', methods=['GET'])
+@login_required
+def get_all_media():
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({'error': 'Database connection failed'}), 500
+            
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT cm.id, cm.camp_id, cm.media_type, cm.media_url, cm.caption, 
+                   cm.upload_date, c.name as camp_name, c.location as camp_location
+            FROM camp_media cm
+            JOIN camps c ON cm.camp_id = c.id
+            ORDER BY cm.upload_date DESC
+        """)
+        
+        media_items = []
+        for row in cursor.fetchall():
+            media_items.append({
+                'id': row[0],
+                'camp_id': row[1],
+                'media_type': row[2],
+                'media_url': row[3],
+                'caption': row[4],
+                'upload_date': row[5].isoformat() if row[5] else None,
+                'camp_name': row[6],
+                'camp_location': row[7]
+            })
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({'media': media_items})
+        
+    except Exception as e:
+        print(f"Error fetching all media: {str(e)}")
+        return jsonify({'error': f'Failed to fetch media: {str(e)}'}), 500
+
+@app.route('/api/media/<int:media_id>', methods=['DELETE'])
+@login_required
+def delete_media(media_id):
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({'error': 'Database connection failed'}), 500
+            
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM camp_media WHERE id = %s", (media_id,))
+        
+        if cursor.rowcount == 0:
+            cursor.close()
+            conn.close()
+            return jsonify({'error': 'Media not found'}), 404
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        return jsonify({'message': 'Media deleted successfully'})
+        
+    except Exception as e:
+        print(f"Error deleting media: {str(e)}")
+        return jsonify({'error': f'Failed to delete media: {str(e)}'}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
