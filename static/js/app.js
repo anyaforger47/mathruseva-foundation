@@ -907,26 +907,32 @@ function displayMedia(mediaItems) {
 }
 
 async function uploadMedia() {
-    const formData = {
-        camp_id: document.getElementById('mediaCamp').value,
-        media_type: document.getElementById('mediaType').value,
-        media_url: document.getElementById('mediaUrl').value,
-        caption: document.getElementById('mediaCaption').value
-    };
+    const formData = new FormData();
+    
+    // Get file
+    const fileInput = document.getElementById('mediaFile');
+    const file = fileInput.files[0];
+    
+    if (file) {
+        formData.append('mediaFile', file);
+    }
+    
+    // Get other form data
+    formData.append('camp_id', document.getElementById('mediaCamp').value);
+    formData.append('media_type', document.getElementById('mediaType').value);
+    formData.append('caption', document.getElementById('mediaCaption').value);
     
     try {
         const response = await fetch('/api/media/upload', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(formData)
+            body: formData  // Don't set Content-Type header for FormData
         });
         
         if (response.ok) {
             showAlert('Media uploaded successfully', 'success');
             bootstrap.Modal.getInstance(document.getElementById('mediaUploadModal')).hide();
             document.getElementById('mediaUploadForm').reset();
+            hideFilePreview(); // Reset preview
             loadMedia(); // Reload media gallery
         } else {
             const errorData = await response.json();
@@ -936,6 +942,60 @@ async function uploadMedia() {
         console.error('Error uploading media:', error);
         showAlert('Error uploading media: ' + error.message, 'danger');
     }
+}
+
+// File preview functionality
+function setupFilePreview() {
+    const fileInput = document.getElementById('mediaFile');
+    const previewDiv = document.getElementById('filePreview');
+    const previewImage = document.getElementById('previewImage');
+    const previewVideo = document.getElementById('previewVideo');
+    const fileName = document.getElementById('fileName');
+    
+    fileInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            // Show preview
+            previewDiv.style.display = 'block';
+            fileName.textContent = file.name;
+            
+            // Hide both previews initially
+            previewImage.style.display = 'none';
+            previewVideo.style.display = 'none';
+            
+            if (file.type.startsWith('image/')) {
+                // Show image preview
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    previewImage.src = e.target.result;
+                    previewImage.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            } else if (file.type.startsWith('video/')) {
+                // Show video preview
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    previewVideo.src = e.target.result;
+                    previewVideo.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            }
+        } else {
+            hideFilePreview();
+        }
+    });
+}
+
+function hideFilePreview() {
+    const previewDiv = document.getElementById('filePreview');
+    const previewImage = document.getElementById('previewImage');
+    const previewVideo = document.getElementById('previewVideo');
+    
+    previewDiv.style.display = 'none';
+    previewImage.style.display = 'none';
+    previewVideo.style.display = 'none';
+    previewImage.src = '';
+    previewVideo.src = '';
 }
 
 async function deleteMedia(mediaId) {
@@ -984,5 +1044,6 @@ document.getElementById('mediaFilter').addEventListener('change', loadMedia);
 // Load camps when media upload modal is opened
 document.getElementById('mediaUploadModal').addEventListener('show.bs.modal', function () {
     loadCampsForMedia();
+    setupFilePreview(); // Setup file preview functionality
 });
 

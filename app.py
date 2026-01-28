@@ -1014,11 +1014,47 @@ def generate_pdf_report():
 @login_required
 def upload_media():
     try:
-        data = request.get_json()
-        camp_id = data.get('camp_id')
-        media_type = data.get('media_type')  # 'photo' or 'video'
-        media_url = data.get('media_url')
-        caption = data.get('caption', '')
+        # Handle file upload
+        if 'mediaFile' in request.files:
+            file = request.files['mediaFile']
+            if file.filename != '':
+                # Save file to uploads directory
+                import os
+                import uuid
+                from werkzeug.utils import secure_filename
+                
+                # Create uploads directory if it doesn't exist
+                upload_dir = os.path.join(os.getcwd(), 'static', 'uploads')
+                if not os.path.exists(upload_dir):
+                    os.makedirs(upload_dir)
+                
+                # Generate unique filename
+                filename = secure_filename(file.filename)
+                unique_filename = f"{uuid.uuid4()}_{filename}"
+                file_path = os.path.join(upload_dir, unique_filename)
+                
+                # Save file
+                file.save(file_path)
+                
+                # Generate URL for the file
+                media_url = f"/static/uploads/{unique_filename}"
+                
+                # Get other form data
+                camp_id = request.form.get('camp_id')
+                media_type = request.form.get('media_type')
+                caption = request.form.get('caption', '')
+                
+                # Auto-detect media type if not specified
+                if not media_type:
+                    media_type = 'photo' if file.content_type.startswith('image/') else 'video'
+                
+        else:
+            # Fallback to URL-based upload (for backward compatibility)
+            data = request.get_json()
+            camp_id = data.get('camp_id')
+            media_type = data.get('media_type')
+            media_url = data.get('media_url')
+            caption = data.get('caption', '')
         
         if not camp_id or not media_type or not media_url:
             return jsonify({'error': 'Missing required fields'}), 400
