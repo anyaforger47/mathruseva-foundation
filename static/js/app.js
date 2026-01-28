@@ -981,3 +981,8 @@ async function loadCampsForMedia() {
 // Filter media
 document.getElementById('mediaFilter').addEventListener('change', loadMedia);
 
+// Load camps when media upload modal is opened
+document.getElementById('mediaUploadModal').addEventListener('show.bs.modal', function () {
+    loadCampsForMedia();
+});
+
