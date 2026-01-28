@@ -12,14 +12,14 @@ CORS(app)
 app.secret_key = os.environ.get('SECRET_KEY', 'mathruseva_foundation_2024_secure_key')
 
 # PostgreSQL Configuration for Render - FIXED VERSION
-# Try multiple Supabase IP addresses due to DNS resolution issues
+# Use Neon PostgreSQL connection
 POSTGRES_CONFIG = {
-    'host': '34.136.197.140',  # Try this first
+    'host': os.environ.get('DB_HOST', 'localhost'),
     'user': os.environ.get('DB_USER', 'mathruseva_user'),
     'password': os.environ.get('DB_PASSWORD', ''),
     'database': os.environ.get('DB_NAME', 'mathruseva_foundation'),
     'port': 5432,
-    'connect_timeout': 10  # Add timeout
+    'connect_timeout': 10
 }
 
 # Alternative IPs to try if this doesn't work
