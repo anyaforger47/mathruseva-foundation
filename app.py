@@ -797,6 +797,192 @@ def get_dashboard_analytics():
         print(f"Error loading analytics: {str(e)}")
         return jsonify({'error': f'Failed to load analytics: {str(e)}'}), 500
 
+# PDF Report Generation
+@app.route('/api/reports/generate-pdf')
+@login_required
+def generate_pdf_report():
+    try:
+        from reportlab.lib.pagesizes import letter, A4
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch
+        from reportlab.lib import colors
+        from reportlab.pdfgen import canvas
+        from io import BytesIO
+        import datetime
+        
+        # Get data from database
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({'error': 'Database connection failed'}), 500
+            
+        cursor = conn.cursor()
+        
+        # Get volunteers data
+        cursor.execute("SELECT name, email, phone, role, join_date, status FROM volunteers ORDER BY join_date DESC")
+        volunteers = cursor.fetchall()
+        
+        # Get camps data
+        cursor.execute("SELECT name, type, location, camp_date, status FROM camps ORDER BY camp_date DESC")
+        camps = cursor.fetchall()
+        
+        # Get donations data
+        cursor.execute("SELECT donation_type, quantity, donor_name, donation_date FROM donations ORDER BY donation_date DESC")
+        donations = cursor.fetchall()
+        
+        cursor.close()
+        conn.close()
+        
+        # Create PDF
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4)
+        styles = getSampleStyleSheet()
+        story = []
+        
+        # Title
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=24,
+            spaceAfter=30,
+            alignment=1  # Center alignment
+        )
+        
+        story.append(Paragraph("Mathruseva Foundation - Impact Report", title_style))
+        story.append(Spacer(1, 20))
+        
+        # Report date
+        current_date = datetime.datetime.now().strftime("%B %d, %Y")
+        story.append(Paragraph(f"Generated on: {current_date}", styles["Normal"]))
+        story.append(Spacer(1, 30))
+        
+        # Volunteers Section
+        story.append(Paragraph("Volunteers Summary", styles["Heading2"]))
+        story.append(Spacer(1, 12))
+        
+        if volunteers:
+            # Create volunteers table
+            volunteer_data = [["Name", "Email", "Phone", "Role", "Join Date", "Status"]]
+            for vol in volunteers:
+                volunteer_data.append([
+                    vol[0],  # name
+                    vol[1],  # email
+                    vol[2] if vol[2] else "N/A",  # phone
+                    vol[3],  # role
+                    vol[4].strftime("%Y-%m-%d") if vol[4] else "N/A",  # join_date
+                    vol[5]   # status
+                ])
+            
+            volunteer_table = Table(volunteer_data, repeatRows=1)
+            volunteer_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 12),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            ]))
+            
+            story.append(volunteer_table)
+            story.append(Paragraph(f"Total Volunteers: {len(volunteers)}", styles["Normal"]))
+        else:
+            story.append(Paragraph("No volunteers found.", styles["Normal"]))
+        
+        story.append(Spacer(1, 30))
+        
+        # Camps Section
+        story.append(Paragraph("Medical Camps Summary", styles["Heading2"]))
+        story.append(Spacer(1, 12))
+        
+        if camps:
+            # Create camps table
+            camp_data = [["Camp Name", "Type", "Location", "Date", "Status"]]
+            for camp in camps:
+                camp_data.append([
+                    camp[0],  # name
+                    camp[1],  # type
+                    camp[2],  # location
+                    camp[3].strftime("%Y-%m-%d") if camp[3] else "N/A",  # camp_date
+                    camp[4]   # status
+                ])
+            
+            camp_table = Table(camp_data, repeatRows=1)
+            camp_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 12),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.lightblue),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            ]))
+            
+            story.append(camp_table)
+            story.append(Paragraph(f"Total Camps: {len(camps)}", styles["Normal"]))
+        else:
+            story.append(Paragraph("No camps found.", styles["Normal"]))
+        
+        story.append(Spacer(1, 30))
+        
+        # Donations Section
+        story.append(Paragraph("Donations Summary", styles["Heading2"]))
+        story.append(Spacer(1, 12))
+        
+        if donations:
+            # Create donations table
+            donation_data = [["Donation Type", "Quantity", "Donor Name", "Date"]]
+            for donation in donations:
+                donation_data.append([
+                    donation[0],  # donation_type
+                    str(donation[1]),  # quantity
+                    donation[2] if donation[2] else "Anonymous",  # donor_name
+                    donation[3].strftime("%Y-%m-%d") if donation[3] else "N/A"  # donation_date
+                ])
+            
+            donation_table = Table(donation_data, repeatRows=1)
+            donation_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 12),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.lightgreen),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            ]))
+            
+            story.append(donation_table)
+            story.append(Paragraph(f"Total Donations Recorded: {len(donations)}", styles["Normal"]))
+        else:
+            story.append(Paragraph("No donations found.", styles["Normal"]))
+        
+        # Footer
+        story.append(Spacer(1, 30))
+        story.append(Paragraph("Thank you for supporting Mathruseva Foundation!", styles["Normal"]))
+        
+        # Build PDF
+        doc.build(story)
+        
+        # Return PDF
+        buffer.seek(0)
+        pdf_data = buffer.getvalue()
+        buffer.close()
+        
+        from flask import send_file
+        return send_file(
+            BytesIO(pdf_data),
+            mimetype='application/pdf',
+            as_attachment=False,
+            download_name=f'mathruseva_report_{datetime.datetime.now().strftime("%Y%m%d")}.pdf'
+        )
+        
+    except Exception as e:
+        print(f"Error generating PDF: {str(e)}")
+        return jsonify({'error': f'Failed to generate PDF: {str(e)}'}), 500
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
