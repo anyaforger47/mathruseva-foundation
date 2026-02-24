@@ -4,19 +4,20 @@ from flask import Flask
 
 app = Flask(__name__)
 
-# Database configuration
-DB_CONFIG = {
+# MySQL Configuration (matching app.py)
+MYSQL_CONFIG = {
     'host': os.environ.get('DB_HOST', 'localhost'),
     'user': os.environ.get('DB_USER', 'root'),
     'password': os.environ.get('DB_PASSWORD', 'NehaJ@447747'),
-    'database': os.environ.get('DB_NAME', 'mathruseva_foundation')
+    'database': os.environ.get('DB_NAME', 'mathruseva_foundation'),
+    'port': 3306
 }
 
 def setup_database():
     """Create database and tables"""
     try:
-        # Connect to MySQL server (without database)
-        config = DB_CONFIG.copy()
+        # Connect to MySQL server (without database first)
+        config = MYSQL_CONFIG.copy()
         if 'database' in config:
             del config['database']
         
@@ -24,10 +25,10 @@ def setup_database():
         cursor = conn.cursor()
         
         # Create database if it doesn't exist
-        cursor.execute(f"CREATE DATABASE IF NOT EXISTS {DB_CONFIG['database']}")
-        cursor.execute(f"USE {DB_CONFIG['database']}")
+        cursor.execute(f"CREATE DATABASE IF NOT EXISTS {MYSQL_CONFIG['database']}")
+        cursor.execute(f"USE {MYSQL_CONFIG['database']}")
         
-        # Create tables
+        # Create tables with MySQL syntax
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS volunteers (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -35,6 +36,8 @@ def setup_database():
                 email VARCHAR(100) UNIQUE NOT NULL,
                 phone VARCHAR(20),
                 role VARCHAR(20) NOT NULL,
+                skills TEXT,
+                availability TEXT,
                 join_date DATE DEFAULT (CURRENT_DATE),
                 status VARCHAR(20) DEFAULT 'Active'
             )
@@ -88,6 +91,18 @@ def setup_database():
                 role VARCHAR(50) DEFAULT 'Helper',
                 FOREIGN KEY (camp_id) REFERENCES camps(id),
                 FOREIGN KEY (volunteer_id) REFERENCES volunteers(id)
+            )
+        """)
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS camp_media (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                camp_id INT NOT NULL,
+                media_type VARCHAR(10) NOT NULL,
+                media_url VARCHAR(500) NOT NULL,
+                caption TEXT,
+                upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (camp_id) REFERENCES camps(id)
             )
         """)
         

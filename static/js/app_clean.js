@@ -21,10 +21,13 @@ function showSection(sectionId) {
     // Update active nav link
     document.querySelectorAll('.nav-link').forEach(link => {
         link.classList.remove('active');
-        if (link.getAttribute('onclick') === `showSection('${sectionId}')`) {
-            link.classList.add('active');
-        }
     });
+    
+    // Find and activate the clicked nav link
+    const activeLink = document.querySelector(`[onclick*="showSection('${sectionId}')"]`);
+    if (activeLink) {
+        activeLink.classList.add('active');
+    }
     
     // Load section-specific content
     if (sectionId === 'volunteers') {
@@ -41,11 +44,10 @@ function showSection(sectionId) {
         loadAnalytics();
     }
     
-    currentSection = sectionId;
     console.log('📍 Current section is now:', sectionId);
 }
 
-// Modal functions - SIMPLE AND WORKING
+// Modal functions
 function openVolunteerModal() {
     console.log('Opening volunteer modal...');
     try {
@@ -206,7 +208,7 @@ function saveDonation() {
         body: JSON.stringify({
             donor_name: donorName,
             amount: amount,
-            type: type
+            donation_type: type
         })
     })
     .then(response => response.json())
@@ -227,280 +229,279 @@ function saveDonation() {
 
 // Load functions
 function loadVolunteers() {
-    console.log('📋 Loading volunteers...');
     fetch('/api/volunteers')
     .then(response => response.json())
     .then(data => {
-        console.log('✅ Volunteers loaded:', data);
         const tbody = document.getElementById('volunteersTableBody');
         tbody.innerHTML = '';
         
         if (data.volunteers && data.volunteers.length > 0) {
             data.volunteers.forEach(volunteer => {
-                const row = `
-                    <tr>
-                        <td>${volunteer.name}</td>
-                        <td>${volunteer.email}</td>
-                        <td>${volunteer.phone}</td>
-                        <td>
-                            <button class="btn btn-sm btn-primary btn-action" onclick="editVolunteer(${volunteer.id})">Edit</button>
-                            <button class="btn btn-sm btn-danger btn-action" onclick="deleteVolunteer(${volunteer.id})">Delete</button>
-                        </td>
-                    </tr>
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${volunteer.name}</td>
+                    <td>${volunteer.email}</td>
+                    <td>${volunteer.phone}</td>
+                    <td>Volunteer</td>
+                    <td><span class="badge bg-success">Active</span></td>
+                    <td>
+                        <button class="btn btn-sm btn-danger" onclick="deleteVolunteer(${volunteer.id})">Delete</button>
+                    </td>
                 `;
-                tbody.innerHTML += row;
+                tbody.appendChild(row);
             });
         } else {
-            tbody.innerHTML = '<tr><td colspan="4" class="text-center">No volunteers found</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center">No volunteers found</td></tr>';
         }
     })
     .catch(error => {
         console.error('Error loading volunteers:', error);
-        document.getElementById('volunteersTableBody').innerHTML = '<tr><td colspan="4" class="text-center">Error loading volunteers</td></tr>';
     });
 }
 
 function loadCamps() {
-    console.log('🏥 Loading camps...');
     fetch('/api/camps')
     .then(response => response.json())
     .then(data => {
-        console.log('✅ Camps loaded:', data);
         const tbody = document.getElementById('campsTableBody');
         tbody.innerHTML = '';
         
         if (data.camps && data.camps.length > 0) {
             data.camps.forEach(camp => {
-                const row = `
-                    <tr>
-                        <td>${camp.name}</td>
-                        <td>${camp.location}</td>
-                        <td>${camp.camp_date}</td>
-                        <td>${camp.type}</td>
-                        <td>
-                            <button class="btn btn-sm btn-primary btn-action" onclick="editCamp(${camp.id})">Edit</button>
-                            <button class="btn btn-sm btn-danger btn-action" onclick="deleteCamp(${camp.id})">Delete</button>
-                        </td>
-                    </tr>
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${camp.name}</td>
+                    <td>${camp.location}</td>
+                    <td>${camp.camp_date}</td>
+                    <td>${camp.type}</td>
+                    <td><span class="badge bg-primary">Upcoming</span></td>
+                    <td>
+                        <button class="btn btn-sm btn-danger" onclick="deleteCamp(${camp.id})">Delete</button>
+                    </td>
                 `;
-                tbody.innerHTML += row;
+                tbody.appendChild(row);
             });
         } else {
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center">No camps found</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center">No camps found</td></tr>';
         }
     })
     .catch(error => {
         console.error('Error loading camps:', error);
-        document.getElementById('campsTableBody').innerHTML = '<tr><td colspan="5" class="text-center">Error loading camps</td></tr>';
     });
 }
 
 function loadDonations() {
-    console.log('💰 Loading donations...');
     fetch('/api/donations')
     .then(response => response.json())
     .then(data => {
-        console.log('✅ Donations loaded:', data);
         const tbody = document.getElementById('donationsTableBody');
         tbody.innerHTML = '';
         
         if (data.donations && data.donations.length > 0) {
             data.donations.forEach(donation => {
-                const row = `
-                    <tr>
-                        <td>${donation.donor_name}</td>
-                        <td>$${donation.amount}</td>
-                        <td>${donation.type}</td>
-                        <td>${donation.date}</td>
-                        <td>
-                            <button class="btn btn-sm btn-primary btn-action" onclick="editDonation(${donation.id})">Edit</button>
-                            <button class="btn btn-sm btn-danger btn-action" onclick="deleteDonation(${donation.id})">Delete</button>
-                        </td>
-                    </tr>
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${donation.donor_name}</td>
+                    <td>$${donation.amount}</td>
+                    <td>${donation.donation_type}</td>
+                    <td>${donation.donation_date}</td>
+                    <td>-</td>
+                    <td>
+                        <button class="btn btn-sm btn-danger" onclick="deleteDonation(${donation.id})">Delete</button>
+                    </td>
                 `;
-                tbody.innerHTML += row;
+                tbody.appendChild(row);
             });
         } else {
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center">No donations found</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center">No donations found</td></tr>';
         }
     })
     .catch(error => {
         console.error('Error loading donations:', error);
-        document.getElementById('donationsTableBody').innerHTML = '<tr><td colspan="5" class="text-center">Error loading donations</td></tr>';
     });
 }
 
 function loadGallery() {
-    console.log('🖼️ Loading gallery...');
     fetch('/api/media')
     .then(response => response.json())
     .then(data => {
-        console.log('✅ Gallery loaded:', data);
-        const grid = document.getElementById('galleryGrid');
-        grid.innerHTML = '';
+        const gallery = document.getElementById('mediaGallery');
+        gallery.innerHTML = '';
         
         if (data.media && data.media.length > 0) {
             data.media.forEach(item => {
-                const mediaItem = `
-                    <div class="col-md-4 mb-3">
-                        <div class="card media-item">
-                            <img src="${item.file_path}" class="card-img-top" alt="${item.title}" style="height: 200px; object-fit: cover;">
-                            <div class="card-body">
-                                <h5 class="card-title">${item.title}</h5>
-                                <p class="card-text"><small class="text-muted">${item.type}</small></p>
-                                <button class="btn btn-sm btn-danger" onclick="deleteMedia(${item.id})">Delete</button>
-                            </div>
+                const col = document.createElement('div');
+                col.className = 'col-md-4 mb-3';
+                col.innerHTML = `
+                    <div class="card">
+                        <img src="${item.file_path}" class="card-img-top" alt="${item.description}">
+                        <div class="card-body">
+                            <p class="card-text">${item.description}</p>
                         </div>
                     </div>
                 `;
-                grid.innerHTML += mediaItem;
+                gallery.appendChild(col);
             });
         } else {
-            grid.innerHTML = '<div class="col-12 text-center"><p class="text-muted">No media found</p></div>';
+            gallery.innerHTML = '<div class="col-12 text-center"><p class="text-muted">No media found</p></div>';
         }
     })
     .catch(error => {
         console.error('Error loading gallery:', error);
-        document.getElementById('galleryGrid').innerHTML = '<div class="col-12 text-center"><p class="text-muted">Error loading gallery</p></div>';
     });
 }
 
 function loadAttendance() {
-    console.log('📋 Loading attendance...');
     fetch('/api/attendance')
     .then(response => response.json())
     .then(data => {
-        console.log('✅ Attendance loaded:', data);
         const tbody = document.getElementById('attendanceTableBody');
         tbody.innerHTML = '';
         
         if (data.attendance && data.attendance.length > 0) {
             data.attendance.forEach(record => {
-                const row = `
-                    <tr>
-                        <td>${record.volunteer_name}</td>
-                        <td>${record.camp_name || 'N/A'}</td>
-                        <td>${record.date}</td>
-                        <td>${record.check_in || 'N/A'}</td>
-                        <td>${record.check_out || 'N/A'}</td>
-                        <td><span class="badge bg-${record.status === 'present' ? 'success' : record.status === 'absent' ? 'danger' : 'warning'}">${record.status}</span></td>
-                        <td>
-                            <button class="btn btn-sm btn-primary btn-action" onclick="editAttendance(${record.id})">Edit</button>
-                            <button class="btn btn-sm btn-danger btn-action" onclick="deleteAttendance(${record.id})">Delete</button>
-                        </td>
-                    </tr>
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${record.volunteer_name}</td>
+                    <td>${record.camp_name}</td>
+                    <td>${record.attendance_date}</td>
+                    <td><span class="badge bg-success">${record.status}</span></td>
+                    <td>
+                        <button class="btn btn-sm btn-danger" onclick="deleteAttendance(${record.id})">Delete</button>
+                    </td>
                 `;
-                tbody.innerHTML += row;
+                tbody.appendChild(row);
             });
         } else {
-            tbody.innerHTML = '<tr><td colspan="7" class="text-center">No attendance records found</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center">No attendance records found</td></tr>';
         }
     })
     .catch(error => {
         console.error('Error loading attendance:', error);
-        document.getElementById('attendanceTableBody').innerHTML = '<tr><td colspan="7" class="text-center">Error loading attendance</td></tr>';
     });
 }
 
 function loadAnalytics() {
-    console.log('📊 Loading analytics...');
     fetch('/api/analytics')
     .then(response => response.json())
     .then(data => {
         console.log('✅ Analytics loaded:', data);
-        
-        // Handle empty or error response gracefully
-        if (!data || data.error) {
-            console.error('Analytics data not available:', data);
-            // Set default values if API fails
-            document.getElementById('totalVolunteers').textContent = '0';
-            document.getElementById('totalCamps').textContent = '0';
-            document.getElementById('totalDonations').textContent = '$0';
-            document.getElementById('presentToday').textContent = '0';
-            document.getElementById('activeVolunteers').textContent = '0';
-            document.getElementById('monthlyDonations').textContent = '$0';
-            return;
-        }
-        
-        // Update dashboard stats
-        document.getElementById('totalVolunteers').textContent = data.total_volunteers || 0;
-        document.getElementById('totalCamps').textContent = data.total_camps || 0;
-        document.getElementById('totalDonations').textContent = '$' + (data.total_donations || 0);
-        document.getElementById('presentToday').textContent = data.present_today || 0;
-        document.getElementById('activeVolunteers').textContent = data.active_volunteers || 0;
-        document.getElementById('monthlyDonations').textContent = '$' + (data.monthly_donations || 0);
         
         // Destroy existing charts
         Object.values(charts).forEach(chart => {
             if (chart) chart.destroy();
         });
         
-        // Camp Types Chart
-        const campCtx = document.getElementById('campChart').getContext('2d');
-        charts.camp = new Chart(campCtx, {
-            type: 'doughnut',
-            data: {
-                labels: data.camp_stats?.map(s => s.type) || [],
-                datasets: [{
-                    data: data.camp_stats?.map(s => s.count) || [],
-                    backgroundColor: [
-                        '#FF6384',
-                        '#36A2EB',
-                        '#FFCE56',
-                        '#4BC0C0',
-                        '#FF9F40'
-                    ],
-                    borderWidth: 2
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        display: true
+        // Camp Statistics Chart
+        const campCtx = document.getElementById('campChart');
+        if (campCtx) {
+            const campData = data.camp_stats || [];
+            const labels = campData.map(s => s.type) || [];
+            const counts = campData.map(s => s.count) || [];
+            
+            charts.camp = new Chart(campCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: counts,
+                        backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#FF9F40'],
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true
+                        }
                     }
                 }
-            }
-        });
+            });
+        }
+        
+        // Volunteer Trends Chart
+        const volunteerCtx = document.getElementById('volunteerChart');
+        if (volunteerCtx) {
+            const volunteerData = data.volunteer_trends || [];
+            const labels = volunteerData.map(t => t.month) || [];
+            const counts = volunteerData.map(t => t.count) || [];
+            
+            charts.volunteer = new Chart(volunteerCtx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'New Volunteers',
+                        data: counts,
+                        borderColor: 'rgb(75, 192, 192)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Donation Trends Chart
+        const donationCtx = document.getElementById('donationChart');
+        if (donationCtx) {
+            const donationData = data.donation_trends || [];
+            const labels = donationData.map(t => t.month) || [];
+            const amounts = donationData.map(t => t.total) || [];
+            
+            charts.donation = new Chart(donationCtx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Donation Amount ($)',
+                        data: amounts,
+                        backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
     })
     .catch(error => {
         console.error('Error loading analytics:', error);
-        // Set default values on error
-        document.getElementById('totalVolunteers').textContent = '0';
-        document.getElementById('totalCamps').textContent = '0';
-        document.getElementById('totalDonations').textContent = '$0';
-        document.getElementById('presentToday').textContent = '0';
-        document.getElementById('activeVolunteers').textContent = '0';
-        document.getElementById('monthlyDonations').textContent = '$0';
-    });
-}
-
-function generatePDFReport() {
-    console.log('📄 Generating PDF report...');
-    fetch('/api/reports/pdf')
-    .then(response => response.blob())
-    .then(blob => {
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'mathruseva_foundation_report.pdf';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-        console.log('✅ PDF report generated and downloaded');
-    })
-    .catch(error => {
-        console.error('Error generating PDF:', error);
-        alert('❌ Error generating PDF report');
     });
 }
 
 // Delete functions
-function deleteVolunteer(volunteerId) {
+function deleteVolunteer(id) {
     if (confirm('Are you sure you want to delete this volunteer?')) {
-        fetch(`/api/volunteers/${volunteerId}`, {
+        fetch(`/api/volunteers/${id}`, {
             method: 'DELETE'
         })
         .then(response => response.json())
@@ -513,15 +514,15 @@ function deleteVolunteer(volunteerId) {
             }
         })
         .catch(error => {
-            console.error('Error deleting volunteer:', error);
+            console.error('Error:', error);
             alert('❌ Error deleting volunteer');
         });
     }
 }
 
-function deleteCamp(campId) {
+function deleteCamp(id) {
     if (confirm('Are you sure you want to delete this camp?')) {
-        fetch(`/api/camps/${campId}`, {
+        fetch(`/api/camps/${id}`, {
             method: 'DELETE'
         })
         .then(response => response.json())
@@ -534,15 +535,15 @@ function deleteCamp(campId) {
             }
         })
         .catch(error => {
-            console.error('Error deleting camp:', error);
+            console.error('Error:', error);
             alert('❌ Error deleting camp');
         });
     }
 }
 
-function deleteDonation(donationId) {
+function deleteDonation(id) {
     if (confirm('Are you sure you want to delete this donation?')) {
-        fetch(`/api/donations/${donationId}`, {
+        fetch(`/api/donations/${id}`, {
             method: 'DELETE'
         })
         .then(response => response.json())
@@ -555,36 +556,15 @@ function deleteDonation(donationId) {
             }
         })
         .catch(error => {
-            console.error('Error deleting donation:', error);
+            console.error('Error:', error);
             alert('❌ Error deleting donation');
         });
     }
 }
 
-function deleteMedia(mediaId) {
-    if (confirm('Are you sure you want to delete this media?')) {
-        fetch(`/api/media/${mediaId}`, {
-            method: 'DELETE'
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert('✅ Media deleted successfully!');
-                loadGallery();
-            } else {
-                alert('❌ Error: ' + (data.error || 'Unknown error'));
-            }
-        })
-        .catch(error => {
-            console.error('Error deleting media:', error);
-            alert('❌ Error deleting media');
-        });
-    }
-}
-
-function deleteAttendance(attendanceId) {
+function deleteAttendance(id) {
     if (confirm('Are you sure you want to delete this attendance record?')) {
-        fetch(`/api/attendance/${attendanceId}`, {
+        fetch(`/api/attendance/${id}`, {
             method: 'DELETE'
         })
         .then(response => response.json())
@@ -597,14 +577,109 @@ function deleteAttendance(attendanceId) {
             }
         })
         .catch(error => {
-            console.error('Error deleting attendance:', error);
+            console.error('Error:', error);
             alert('❌ Error deleting attendance record');
         });
     }
 }
 
+// PDF Report function
+function generatePDFReport() {
+    fetch('/api/reports/pdf', {
+        method: 'GET'
+    })
+    .then(response => {
+        if (response.ok) {
+            return response.blob();
+        }
+        throw new Error('PDF generation failed');
+    })
+    .then(blob => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'mathruseva_foundation_report.pdf';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    })
+    .catch(error => {
+        console.error('Error generating PDF:', error);
+        alert('❌ Error generating PDF report');
+    });
+}
+
+// Analytics functions
+function refreshAnalytics() {
+    console.log('🔄 Refreshing analytics...');
+    loadAnalytics();
+}
+
 // Initialize dashboard on page load
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('🚀 DOM loaded, initializing dashboard...');
+    
+    // Load dashboard overview data
+    fetch('/api/analytics')
+    .then(response => response.json())
+    .then(data => {
+        // Update dashboard metrics
+        if (data.total_volunteers) {
+            document.getElementById('totalVolunteers').textContent = data.total_volunteers;
+        }
+        if (data.total_camps) {
+            document.getElementById('totalCamps').textContent = data.total_camps;
+        }
+        if (data.total_donations) {
+            document.getElementById('totalDonations').textContent = data.total_donations;
+        }
+        if (data.upcoming_camps) {
+            document.getElementById('upcomingCamps').textContent = data.upcoming_camps;
+        }
+        if (data.active_volunteers) {
+            document.getElementById('activeVolunteers').textContent = data.active_volunteers;
+        }
+        if (data.monthly_donations) {
+            document.getElementById('monthlyDonations').textContent = data.monthly_donations;
+        }
+    })
+    .catch(error => {
+        console.error('Error loading dashboard data:', error);
+    });
+    
+    // Media file preview
+    const mediaFileInput = document.getElementById('mediaFile');
+    if (mediaFileInput) {
+        mediaFileInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            const preview = document.getElementById('mediaPreview');
+            
+            if (file && preview) {
+                if (file.type.startsWith('image/')) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        preview.innerHTML = `<img src="${e.target.result}" class="img-fluid" style="max-height: 200px;">`;
+                    };
+                    reader.readAsDataURL(file);
+                } else if (file.type.startsWith('video/')) {
+                    preview.innerHTML = `<div class="alert alert-info"><i class="fas fa-video me-2"></i>Video selected: ${file.name}</div>`;
+                }
+            }
+        });
+    }
+    
+    // Set today's date as default for donation date
+    const donationDateInput = document.getElementById('donationDate');
+    if (donationDateInput) {
+        donationDateInput.value = new Date().toISOString().split('T')[0];
+    }
+    
+    // Set today's date as default for camp date
+    const campDateInput = document.getElementById('campDate');
+    if (campDateInput) {
+        campDateInput.value = new Date().toISOString().split('T')[0];
+    }
+    
     console.log('✅ Dashboard ready!');
-    loadAnalytics();
 });

@@ -1,1189 +1,1100 @@
-from flask import Flask, request, jsonify, render_template, redirect, url_for, session, send_file
-from flask_cors import CORS
-from functools import wraps
-from datetime import datetime
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session, send_file
+import mysql.connector
 import os
-import psycopg2
+from datetime import datetime
+import io
+
+try:
+    from reportlab.lib.pagesizes import letter, A4
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.units import inch
+    from reportlab.lib import colors
+    REPORTLAB_AVAILABLE = True
+except ImportError:
+    REPORTLAB_AVAILABLE = False
+    print("⚠️ ReportLab not available. PDF generation will be disabled.")
 
 app = Flask(__name__)
-CORS(app)
 
-# Secret key for session management
-app.secret_key = os.environ.get('SECRET_KEY', 'mathruseva_foundation_2024_secure_key')
-
-# PostgreSQL Configuration for Render - FIXED VERSION
-# Use Neon PostgreSQL connection
-POSTGRES_CONFIG = {
+# Database configuration
+DB_CONFIG = {
     'host': os.environ.get('DB_HOST', 'localhost'),
-    'user': os.environ.get('DB_USER', 'mathruseva_user'),
-    'password': os.environ.get('DB_PASSWORD', ''),
+    'user': os.environ.get('DB_USER', 'root'), 
+    'password': os.environ.get('DB_PASSWORD', 'NehaJ@447747'),
     'database': os.environ.get('DB_NAME', 'mathruseva_foundation'),
-    'port': 5432,
-    'connect_timeout': 10
+    'port': 3306
 }
 
-# Alternative IPs to try if this doesn't work
-SUPABASE_IPS = [
-    '34.136.197.140',
-    '34.136.197.141',
-    '34.136.197.142',
-    '34.136.197.143'
-]
-
-# Debug environment variables
-print("=== ENVIRONMENT VARIABLES DEBUG ===")
-print(f"DB_HOST: '{os.environ.get('DB_HOST', 'NOT_SET')}'")
-print(f"DB_USER: '{os.environ.get('DB_USER', 'NOT_SET')}'")
-print(f"DB_PASSWORD: '{os.environ.get('DB_PASSWORD', 'NOT_SET')}'")
-print(f"DB_NAME: '{os.environ.get('DB_NAME', 'NOT_SET')}'")
-print(f"SECRET_KEY: '{os.environ.get('SECRET_KEY', 'NOT_SET')}'")
-print("=== END DEBUG ===")
-
-def get_db_connection():
+def get_db():
     try:
-        print(f"Attempting to connect to: {POSTGRES_CONFIG['host']}")
-        print(f"User: {POSTGRES_CONFIG['user']}")
-        print(f"Database: {POSTGRES_CONFIG['database']}")
-        print(f"Port: {POSTGRES_CONFIG['port']}")
-        
-        conn = psycopg2.connect(**POSTGRES_CONFIG)
-        print("✅ Database connection successful!")
+        conn = mysql.connector.connect(**DB_CONFIG)
         return conn
     except Exception as e:
-        print(f"❌ Database connection error: {e}")
-        print(f"❌ Full config: {POSTGRES_CONFIG}")
+        print(f"❌ DB Error: {e}")
         return None
 
-# Authentication decorator
-def login_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'logged_in' not in session:
-            return redirect(url_for('login'))
-        return f(*args, **kwargs)
-    return decorated_function
+# Simple users for authentication
+USERS = {
+    'admin': {'password': 'admin123', 'role': 'admin', 'name': 'Administrator'}
+}
 
-# Login route
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
+        username = request.form.get('username')
+        password = request.form.get('password')
         
-        if username == 'admin' and password == 'admin123':
+        if username in USERS and USERS[username]['password'] == password:
             session['logged_in'] = True
             session['username'] = username
+            session['user_role'] = USERS[username]['role']
             return redirect(url_for('dashboard'))
         else:
-            return render_template('login.html', error='Invalid username or password')
+            return render_template('login.html', error='Invalid credentials')
     
     return render_template('login.html')
 
-# Logout route
 @app.route('/logout')
 def logout():
     session.clear()
     return redirect(url_for('login'))
 
-# Dashboard (protected)
 @app.route('/dashboard')
-@login_required
 def dashboard():
-    return render_template('index.html')
+    if 'logged_in' not in session:
+        return redirect(url_for('login'))
+    
+    # Get real statistics
+    try:
+        conn = get_db()
+        if conn:
+            cursor = conn.cursor()
+            
+            # Total volunteers
+            cursor.execute("SELECT COUNT(*) FROM volunteers")
+            total_volunteers = cursor.fetchone()[0]
+            
+            # Total camps
+            cursor.execute("SELECT COUNT(*) FROM camps")
+            total_camps = cursor.fetchone()[0]
+            
+            # Total donations
+            cursor.execute("SELECT COALESCE(SUM(amount), 0) FROM donations")
+            total_donations = cursor.fetchone()[0]
+            
+            # Today's attendance
+            today = datetime.now().strftime('%Y-%m-%d')
+            cursor.execute("SELECT COUNT(*) FROM volunteer_attendance WHERE DATE(attendance_date) = %s AND status = 'present'", (today,))
+            present_today = cursor.fetchone()[0]
+            
+            cursor.close()
+            conn.close()
+            
+            stats = {
+                'total_volunteers': total_volunteers,
+                'total_camps': total_camps,
+                'total_donations': total_donations,
+                'present_today': present_today,
+                'absent_today': 0,
+                'late_today': 0,
+                'attendance_rate': 100 if present_today > 0 else 0
+            }
+        else:
+            stats = {
+                'total_volunteers': 0,
+                'total_camps': 0,
+                'total_donations': 0,
+                'present_today': 0,
+                'absent_today': 0,
+                'late_today': 0,
+                'attendance_rate': 0
+            }
+    except Exception as e:
+        print(f"Error loading stats: {e}")
+        stats = {
+            'total_volunteers': 0,
+            'total_camps': 0,
+            'total_donations': 0,
+            'present_today': 0,
+            'absent_today': 0,
+            'late_today': 0,
+            'attendance_rate': 0
+        }
+    
+    return render_template('index.html', stats=stats)
 
-# Serve login page as default
 @app.route('/')
 def index():
     if 'logged_in' in session:
         return redirect(url_for('dashboard'))
     return redirect(url_for('login'))
 
-# Simple test API to debug the issue
-@app.route('/api/test')
-def test_api():
-    try:
-        # Test basic response
-        return jsonify({'message': 'API is working!', 'timestamp': datetime.now().isoformat()})
-    except Exception as e:
-        return jsonify({'error': f'Test failed: {str(e)}'}), 500
-
-# Test multiple Supabase IPs
-@app.route('/api/test-multiple-ips')
-def test_multiple_ips():
-    results = []
-    
-    for ip in SUPABASE_IPS:
+@app.route('/api/volunteers', methods=['GET', 'POST'])
+def volunteers_api():
+    if request.method == 'GET':
         try:
-            print(f"=== TESTING IP: {ip} ===")
+            conn = get_db()
+            if conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT * FROM volunteers")
+                volunteers = cursor.fetchall()
+                cursor.close()
+                conn.close()
+                
+                # Convert to list of dictionaries
+                volunteer_list = []
+                for volunteer in volunteers:
+                    volunteer_list.append({
+                        'id': volunteer[0],
+                        'name': volunteer[1],
+                        'email': volunteer[2], 
+                        'phone': volunteer[3],
+                        'role': volunteer[4],
+                        'status': volunteer[5],
+                        'join_date': str(volunteer[6])
+                    })
+                
+                return jsonify({'volunteers': volunteer_list})
+            else:
+                return jsonify({'volunteers': []})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+    
+    elif request.method == 'POST':
+        try:
+            data = request.get_json()
+            conn = get_db()
+            if conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO volunteers (name, email, phone, role, status, join_date)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """, (data['name'], data['email'], data['phone'], data['role'], data['status'], data['join_date']))
+                conn.commit()
+                cursor.close()
+                conn.close()
+                return jsonify({'success': True, 'message': 'Volunteer added successfully'})
+            else:
+                return jsonify({'error': 'Database connection failed'}), 500
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+@app.route('/api/camps', methods=['GET', 'POST'])
+def camps_api():
+    if request.method == 'GET':
+        try:
+            conn = get_db()
+            if conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT * FROM camps")
+                camps = cursor.fetchall()
+                cursor.close()
+                conn.close()
+                
+                # Convert to list of dictionaries
+                camp_list = []
+                for camp in camps:
+                    camp_list.append({
+                        'id': camp[0],
+                        'name': camp[1],
+                        'type': camp[2],
+                        'location': camp[3],
+                        'camp_date': str(camp[4]),
+                        'description': camp[5],
+                        'status': camp[6]
+                    })
+                
+                return jsonify({'camps': camp_list})
+            else:
+                return jsonify({'camps': []})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+    
+    elif request.method == 'POST':
+        try:
+            data = request.get_json()
+            conn = get_db()
+            if conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO camps (name, type, location, camp_date, description, status)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """, (data['name'], data['type'], data['location'], data['camp_date'], data['description'], data['status']))
+                conn.commit()
+                cursor.close()
+                conn.close()
+                return jsonify({'success': True, 'message': 'Camp added successfully'})
+            else:
+                return jsonify({'error': 'Database connection failed'}), 500
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+@app.route('/api/donations', methods=['GET', 'POST'])
+def donations_api():
+    if request.method == 'GET':
+        try:
+            conn = get_db()
+            if conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT * FROM donations")
+                donations = cursor.fetchall()
+                cursor.close()
+                conn.close()
+                
+                # Convert to list of dictionaries
+                donation_list = []
+                for donation in donations:
+                    donation_list.append({
+                        'id': donation[0],
+                        'donation_type': donation[1],
+                        'quantity': donation[2],
+                        'amount': donation[3],
+                        'donor_name': donation[4],
+                        'donation_date': str(donation[5])
+                    })
+                
+                return jsonify({'donations': donation_list})
+            else:
+                return jsonify({'donations': []})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+    
+    elif request.method == 'POST':
+        try:
+            data = request.get_json()
+            conn = get_db()
+            if conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO donations (donation_type, quantity, amount, donor_name, donation_date)
+                    VALUES (%s, %s, %s, %s, %s)
+                """, (data['donation_type'], data['quantity'], data['amount'], data['donor_name'], data['donation_date']))
+                conn.commit()
+                cursor.close()
+                conn.close()
+                return jsonify({'success': True, 'message': 'Donation added successfully'})
+            else:
+                return jsonify({'error': 'Database connection failed'}), 500
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+@app.route('/api/media', methods=['GET', 'POST'])
+def media_api():
+    if request.method == 'GET':
+        try:
+            conn = get_db()
+            if conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT * FROM media ORDER BY upload_date DESC")
+                media_files = cursor.fetchall()
+                cursor.close()
+                conn.close()
+                
+                # Convert to list of dictionaries
+                media_list = []
+                for media in media_files:
+                    media_list.append({
+                        'id': media[0],
+                        'filename': media[1],
+                        'file_type': media[2],
+                        'camp_id': media[3],
+                        'upload_date': str(media[4]),
+                        'file_path': media[5]
+                    })
+                
+                return jsonify({'media': media_list})
+            else:
+                return jsonify({'media': []})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+    
+    elif request.method == 'POST':
+        try:
+            # Handle file upload
+            if 'file' not in request.files:
+                return jsonify({'error': 'No file provided'}), 400
             
-            config = {
-                'host': ip,
-                'user': os.environ.get('DB_USER', 'postgres'),
-                'password': os.environ.get('DB_PASSWORD', ''),
-                'database': os.environ.get('DB_NAME', 'postgres'),
-                'port': 5432,
-                'connect_timeout': 5
-            }
+            file = request.files['file']
+            camp_id = request.form.get('camp_id')
             
-            conn = psycopg2.connect(**config)
+            if file.filename == '':
+                return jsonify({'error': 'No file selected'}), 400
+            
+            # Save file logic here
+            filename = file.filename
+            file_type = filename.split('.')[-1].lower()
+            
+            conn = get_db()
+            if conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO media (filename, file_type, camp_id, upload_date, file_path)
+                    VALUES (%s, %s, %s, %s, %s)
+                """, (filename, file_type, camp_id, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), f'/static/uploads/{filename}'))
+                conn.commit()
+                cursor.close()
+                conn.close()
+                return jsonify({'success': True, 'message': 'Media uploaded successfully'})
+            else:
+                return jsonify({'error': 'Database connection failed'}), 500
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+@app.route('/api/analytics', methods=['GET'])
+def analytics_api():
+    try:
+        conn = get_db()
+        if conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT 1")
-            result = cursor.fetchone()
+            
+            # Get monthly volunteer trends
+            cursor.execute("""
+                SELECT DATE_FORMAT(join_date, '%Y-%m') as month, COUNT(*) as count 
+                FROM volunteers 
+                WHERE join_date >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
+                GROUP BY DATE_FORMAT(join_date, '%Y-%m')
+                ORDER BY month
+            """)
+            volunteer_trends = cursor.fetchall()
+            
+            # Get camp statistics by type
+            cursor.execute("""
+                SELECT type, COUNT(*) as count 
+                FROM camps 
+                GROUP BY type
+            """)
+            camp_stats = cursor.fetchall()
+            
+            # Get donation trends
+            cursor.execute("""
+                SELECT DATE_FORMAT(donation_date, '%Y-%m') as month, SUM(amount) as total
+                FROM donations 
+                WHERE donation_date >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
+                GROUP BY DATE_FORMAT(donation_date, '%Y-%m')
+                ORDER BY month
+            """)
+            donation_trends = cursor.fetchall()
+            
             cursor.close()
             conn.close()
             
-            results.append({
-                'ip': ip,
-                'status': 'success',
-                'message': f'Connected successfully to {ip}'
+            return jsonify({
+                'volunteer_trends': [{'month': row[0], 'count': row[1]} for row in volunteer_trends],
+                'camp_stats': [{'type': row[0], 'count': row[1]} for row in camp_stats],
+                'donation_trends': [{'month': row[0], 'total': float(row[1])} for row in donation_trends]
             })
-            print(f"✅ SUCCESS: {ip}")
-            
-        except Exception as e:
-            results.append({
-                'ip': ip,
-                'status': 'failed',
-                'error': str(e)
-            })
-            print(f"❌ FAILED: {ip} - {str(e)}")
-    
-    return jsonify({
-        'message': 'IP testing completed',
-        'results': results
-    })
-
-# Get Supabase IP address
-@app.route('/api/get-supabase-ip')
-def get_supabase_ip():
-    try:
-        import subprocess
-        import re
-        
-        # Try to get IP address using nslookup or dig
-        host = 'db.jlcwxbkndfrtaoybvgsa.supabase.co'
-        
-        try:
-            # Try nslookup first
-            result = subprocess.run(['nslookup', host], capture_output=True, text=True, timeout=10)
-            if result.returncode == 0:
-                # Extract IP from nslookup output
-                ip_match = re.search(r'Address: (\d+\.\d+\.\d+\.\d+)', result.stdout)
-                if ip_match:
-                    ip = ip_match.group(1)
-                    return jsonify({
-                        'message': f'Found IP for {host}',
-                        'ip_address': ip,
-                        'method': 'nslookup'
-                    })
-        except:
-            pass
-        
-        # Fallback to socket method
-        import socket
-        ip = socket.gethostbyname(host)
-        return jsonify({
-            'message': f'Found IP for {host}',
-            'ip_address': ip,
-            'method': 'socket'
-        })
-        
     except Exception as e:
-        return jsonify({
-            'error': f'Could not resolve IP for {host}',
-            'details': str(e)
-        }), 500
-
-# Test hostname resolution
-@app.route('/api/test-hostname')
-def test_hostname():
-    try:
-        import socket
-        host = 'db.jlcwxbkndfrtaoybvgsa.supabase.co'
-        
-        print(f"=== HOSTNAME RESOLUTION TEST ===")
-        print(f"Testing hostname: {host}")
-        
-        # Try to resolve hostname
-        ip_address = socket.gethostbyname(host)
-        print(f"✅ Hostname resolved to: {ip_address}")
-        
-        return jsonify({
-            'message': f'Hostname {host} resolved successfully',
-            'ip_address': ip_address
-        })
-        
-    except socket.gaierror as e:
-        print(f"❌ Hostname resolution failed: {str(e)}")
-        return jsonify({
-            'error': f'Hostname resolution failed for {host}',
-            'details': str(e)
-        }), 500
-    except Exception as e:
-        print(f"❌ Hostname test failed: {str(e)}")
-        return jsonify({'error': f'Hostname test failed: {str(e)}'}), 500
-
-# Test network connectivity to Supabase
-@app.route('/api/test-network')
-def test_network():
-    try:
-        import socket
-        host = 'db.jlcwxbkndfrtaoybvgsa.supabase.co'
-        port = 5432
-        
-        print(f"=== NETWORK TEST START ===")
-        print(f"Testing connection to {host}:{port}")
-        
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(10)
-        result = sock.connect_ex((host, port))
-        sock.close()
-        
-        if result == 0:
-            print(f"✅ Network connection successful to {host}:{port}")
-            return jsonify({'message': f'Network connection successful to {host}:{port}', 'result': 'success'})
-        else:
-            print(f"❌ Network connection failed to {host}:{port} - Error code: {result}")
-            return jsonify({'error': f'Network connection failed to {host}:{port}', 'error_code': result}), 500
-            
-    except Exception as e:
-        print(f"❌ Network test failed: {str(e)}")
-        return jsonify({'error': f'Network test failed: {str(e)}'}), 500
-
-# Test database connection
-@app.route('/api/test-db')
-def test_database():
-    try:
-        print("=== DATABASE CONNECTION TEST START ===")
-        print(f"Environment variables loaded: {bool(os.environ.get('DB_HOST'))}")
-        
-        conn = get_db_connection()
-        if not conn:
-            print("❌ Connection returned None")
-            return jsonify({'error': 'Database connection failed - returned None'}), 500
-        
-        print("✅ Connection object created successfully")
-        
-        cursor = conn.cursor()
-        # Create media table for camp photos and videos
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS camp_media (
-                id SERIAL PRIMARY KEY,
-                camp_id INTEGER REFERENCES camps(id) ON DELETE CASCADE,
-                media_type VARCHAR(10) NOT NULL, -- 'photo' or 'video'
-                media_url VARCHAR(500) NOT NULL,
-                caption TEXT,
-                upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        
-        print("✅ Tables created successfully")
-        
-        cursor.execute("SELECT 1 as test")
-        print("✅ Query executed successfully")
-        
-        result = cursor.fetchone()
-        print(f"✅ Query result: {result}")
-        
-        cursor.close()
-        conn.close()
-        print("✅ Connection closed successfully")
-        print("=== DATABASE CONNECTION TEST SUCCESS ===")
-        
-        return jsonify({'message': 'Database connection working!', 'result': result[0]})
-        
-    except Exception as e:
-        print(f"❌ DATABASE CONNECTION TEST FAILED: {str(e)}")
-        print(f"❌ Error type: {type(e).__name__}")
-        print(f"❌ Error details: {repr(e)}")
-        print("=== DATABASE CONNECTION TEST FAILED ===")
-        return jsonify({'error': f'Database test failed: {str(e)}'}), 500
-
-# New test endpoint to force deployment
-@app.route('/api/version')
-def version_check():
-    return jsonify({'version': '2.0', 'database': 'postgresql', 'timestamp': datetime.now().isoformat()})
-
-# Health check for Render
-@app.route('/health')
-def health():
-    try:
-        # Test database connection
-        conn = get_db_connection()
-        if conn:
-            conn.close()
-            return jsonify({'status': 'healthy', 'database': 'postgresql', 'connection': 'ok'})
-        else:
-            return jsonify({'status': 'healthy', 'database': 'postgresql', 'connection': 'failed'})
-    except Exception as e:
-        return jsonify({'status': 'healthy', 'database': 'postgresql', 'connection': f'error: {str(e)}'})
-
-# Database setup route
-@app.route('/setup-database')
-def setup_database():
-    try:
-        print("Starting database setup...")
-        conn = get_db_connection()
-        if not conn:
-            print("❌ Database connection failed")
-            return jsonify({'error': 'Database connection failed'}), 500
-        
-        print("✅ Database connected successfully")
-        cursor = conn.cursor()
-        
-        # Create volunteers table first
-        print("Creating volunteers table...")
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS volunteers (
-                id SERIAL PRIMARY KEY,
-                name VARCHAR(100) NOT NULL,
-                email VARCHAR(100) UNIQUE NOT NULL,
-                phone VARCHAR(20),
-                role VARCHAR(20) NOT NULL,
-                join_date DATE DEFAULT CURRENT_DATE,
-                status VARCHAR(20) DEFAULT 'Active'
-            )
-        """)
-        print("✅ Volunteers table created")
-        
-        # Create camps table
-        print("Creating camps table...")
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS camps (
-                id SERIAL PRIMARY KEY,
-                name VARCHAR(200) NOT NULL,
-                type VARCHAR(50) NOT NULL,
-                location VARCHAR(200) NOT NULL,
-                camp_date DATE NOT NULL,
-                description TEXT,
-                status VARCHAR(20) DEFAULT 'Planned'
-            )
-        """)
-        print("✅ Camps table created")
-        
-        # Create donations table
-        print("Creating donations table...")
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS donations (
-                id SERIAL PRIMARY KEY,
-                camp_id INTEGER,
-                donation_type VARCHAR(50) NOT NULL,
-                quantity INTEGER NOT NULL,
-                donor_name VARCHAR(100),
-                donation_date DATE NOT NULL,
-                notes TEXT
-            )
-        """)
-        print("✅ Donations table created")
-        
-        # Create medical_summary table
-        print("Creating medical_summary table...")
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS medical_summary (
-                id SERIAL PRIMARY KEY,
-                camp_id INTEGER,
-                total_patients INTEGER DEFAULT 0,
-                eye_checkups INTEGER DEFAULT 0,
-                blood_donations INTEGER DEFAULT 0,
-                general_consultations INTEGER DEFAULT 0,
-                children_benefited INTEGER DEFAULT 0,
-                summary_date DATE DEFAULT CURRENT_DATE,
-                notes TEXT
-            )
-        """)
-        print("✅ Medical_summary table created")
-        
-        # Create media table for camp photos and videos
-        print("Creating media table...")
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS camp_media (
-                id SERIAL PRIMARY KEY,
-                camp_id INTEGER REFERENCES camps(id) ON DELETE CASCADE,
-                media_type VARCHAR(10) NOT NULL, -- 'photo' or 'video'
-                media_url VARCHAR(500) NOT NULL,
-                caption TEXT,
-                upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        print("✅ Media table created")
-        
-        # Insert sample data
-        print("Inserting sample data...")
-        cursor.execute("""
-            INSERT INTO volunteers (name, email, phone, role) 
-            VALUES ('Test Volunteer', 'test@example.com', '1234567890', 'Doctor')
-            ON CONFLICT (email) DO NOTHING
-        """)
-        print("✅ Sample data inserted")
-        
-        # Commit the transaction
-        conn.commit()
-        print("✅ Transaction committed")
-        
-        # Verify tables exist
-        cursor.execute("""
-            SELECT table_name FROM information_schema.tables 
-            WHERE table_schema = 'public'
-        """)
-        tables = [row[0] for row in cursor.fetchall()]
-        print(f"✅ Tables found: {tables}")
-        
-        cursor.close()
-        conn.close()
-        
-        return jsonify({
-            'message': 'Database setup completed successfully!', 
-            'tables_created': tables,
-            'sample_data_added': True
-        })
-        
-    except Exception as e:
-        print(f"❌ Database setup failed: {str(e)}")
-        return jsonify({'error': f'Database setup failed: {str(e)}'}), 500
-
-# Simple volunteer test (no login required)
-@app.route('/api/test-volunteers')
-def test_volunteers():
-    try:
-        conn = get_db_connection()
-        if not conn:
-            return jsonify({'error': 'Database connection failed'}), 500
-            
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM volunteers ORDER BY join_date DESC")
-        
-        columns = [desc[0] for desc in cursor.description]
-        volunteers = [dict(zip(columns, row)) for row in cursor.fetchall()]
-        
-        cursor.close()
-        conn.close()
-        return jsonify({'message': f'Found {len(volunteers)} volunteers', 'data': volunteers})
-        
-    except Exception as e:
-        return jsonify({'error': f'Volunteer test failed: {str(e)}'}), 500
-
-# Simple add volunteer test (no login required)
-@app.route('/api/test-add-volunteer', methods=['POST'])
-def test_add_volunteer():
-    try:
-        data = request.get_json()
-        if not data:
-            data = {
-                'name': 'Test Volunteer',
-                'email': 'test@example.com',
-                'phone': '1234567890',
-                'role': 'Doctor'
-            }
-        
-        conn = get_db_connection()
-        if not conn:
-            return jsonify({'error': 'Database connection failed'}), 500
-            
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO volunteers (name, email, phone, role) 
-            VALUES (%s, %s, %s, %s)
-            RETURNING id
-        """, (data['name'], data['email'], data['phone'], data['role']))
-        
-        volunteer_id = cursor.fetchone()[0]
-        conn.commit()
-        cursor.close()
-        conn.close()
-        
-        return jsonify({'message': f'Test volunteer added with ID: {volunteer_id}', 'id': volunteer_id})
-        
-    except Exception as e:
-        return jsonify({'error': f'Add volunteer test failed: {str(e)}'}), 500
-
-# Volunteer Management APIs
-@app.route('/api/volunteers', methods=['GET'])
-@login_required
-def get_volunteers():
-    try:
-        conn = get_db_connection()
-        if not conn:
-            print("Database connection failed for volunteers")
-            return jsonify({'error': 'Database connection failed'}), 500
-            
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM volunteers ORDER BY join_date DESC")
-        
-        # Convert to dictionary format
-        columns = [desc[0] for desc in cursor.description]
-        volunteers = [dict(zip(columns, row)) for row in cursor.fetchall()]
-        
-        cursor.close()
-        conn.close()
-        print(f"Successfully loaded {len(volunteers)} volunteers")
-        return jsonify(volunteers)
-        
-    except Exception as e:
-        print(f"Error loading volunteers: {str(e)}")
-        return jsonify({'error': f'Failed to load volunteers: {str(e)}'}), 500
-
-@app.route('/api/volunteers', methods=['POST'])
-@login_required
-def add_volunteer():
-    try:
-        data = request.get_json()
-        print(f"Received volunteer data: {data}")
-        
-        conn = get_db_connection()
-        if not conn:
-            print("Database connection failed")
-            return jsonify({'error': 'Database connection failed'}), 500
-            
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO volunteers (name, email, phone, role) 
-            VALUES (%s, %s, %s, %s)
-            RETURNING id
-        """, (data['name'], data['email'], data['phone'], data['role']))
-        
-        volunteer_id = cursor.fetchone()[0]
-        conn.commit()
-        cursor.close()
-        conn.close()
-        
-        print(f"Successfully added volunteer with ID: {volunteer_id}")
-        return jsonify({'message': 'Volunteer added successfully', 'id': volunteer_id})
-        
-    except Exception as e:
-        print(f"Error adding volunteer: {str(e)}")
-        return jsonify({'error': f'Failed to add volunteer: {str(e)}'}), 500
-
-@app.route('/api/volunteers/<int:volunteer_id>', methods=['PUT'])
-@login_required
-def update_volunteer(volunteer_id):
-    data = request.get_json()
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({'error': 'Database connection failed'}), 500
-    cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE volunteers 
-        SET name = %s, email = %s, phone = %s, role = %s, status = %s
-        WHERE id = %s
-    """, (data['name'], data['email'], data['phone'], data['role'], data['status'], volunteer_id))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    return jsonify({'message': 'Volunteer updated successfully'})
+        print(f"❌ Analytics API Error: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/volunteers/<int:volunteer_id>', methods=['DELETE'])
-@login_required
 def delete_volunteer(volunteer_id):
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({'error': 'Database connection failed'}), 500
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM volunteers WHERE id = %s", (volunteer_id,))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    return jsonify({'message': 'Volunteer deleted successfully'})
-
-# Camp Management APIs
-@app.route('/api/camps', methods=['GET'])
-@login_required
-def get_camps():
     try:
-        conn = get_db_connection()
-        if not conn:
-            print("Database connection failed for camps")
-            return jsonify({'error': 'Database connection failed'}), 500
-            
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM camps ORDER BY camp_date DESC")
-        
-        columns = [desc[0] for desc in cursor.description]
-        camps = [dict(zip(columns, row)) for row in cursor.fetchall()]
-        
-        cursor.close()
-        conn.close()
-        print(f"Successfully loaded {len(camps)} camps")
-        return jsonify(camps)
-        
-    except Exception as e:
-        print(f"Error loading camps: {str(e)}")
-        return jsonify({'error': f'Failed to load camps: {str(e)}'}), 500
-
-@app.route('/api/camps', methods=['POST'])
-@login_required
-def add_camp():
-    try:
-        data = request.get_json()
-        print(f"Received camp data: {data}")
-        
-        conn = get_db_connection()
-        if not conn:
-            print("Database connection failed")
-            return jsonify({'error': 'Database connection failed'}), 500
-            
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO camps (name, type, location, camp_date, description) 
-            VALUES (%s, %s, %s, %s, %s)
-            RETURNING id
-        """, (data['name'], data['type'], data['location'], data['camp_date'], data.get('description', '')))
-        
-        camp_id = cursor.fetchone()[0]
-        conn.commit()
-        cursor.close()
-        conn.close()
-        
-        print(f"Successfully added camp with ID: {camp_id}")
-        return jsonify({'message': 'Camp added successfully', 'id': camp_id})
-        
-    except Exception as e:
-        print(f"Error adding camp: {str(e)}")
-        return jsonify({'error': f'Failed to add camp: {str(e)}'}), 500
-
-@app.route('/api/camps/<int:camp_id>', methods=['PUT'])
-@login_required
-def update_camp(camp_id):
-    data = request.get_json()
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({'error': 'Database connection failed'}), 500
-    cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE camps 
-        SET name = %s, type = %s, location = %s, camp_date = %s, description = %s, status = %s
-        WHERE id = %s
-    """, (data['name'], data['type'], data['location'], data['camp_date'], data.get('description', ''), data.get('status', 'Planned'), camp_id))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    return jsonify({'message': 'Camp updated successfully'})
-
-@app.route('/api/camps/<int:camp_id>', methods=['DELETE'])
-@login_required
-def delete_camp(camp_id):
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({'error': 'Database connection failed'}), 500
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM camps WHERE id = %s", (camp_id,))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    return jsonify({'message': 'Camp deleted successfully'})
-
-# Donation APIs
-@app.route('/api/donations', methods=['GET'])
-@login_required
-def get_donations():
-    try:
-        conn = get_db_connection()
-        if not conn:
-            print("Database connection failed for donations")
-            return jsonify({'error': 'Database connection failed'}), 500
-            
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT d.*, c.name as camp_name 
-            FROM donations d 
-            LEFT JOIN camps c ON d.camp_id = c.id 
-            ORDER BY donation_date DESC
-        """)
-        
-        columns = [desc[0] for desc in cursor.description]
-        donations = [dict(zip(columns, row)) for row in cursor.fetchall()]
-        
-        cursor.close()
-        conn.close()
-        print(f"Successfully loaded {len(donations)} donations")
-        return jsonify(donations)
-        
-    except Exception as e:
-        print(f"Error loading donations: {str(e)}")
-        return jsonify({'error': f'Failed to load donations: {str(e)}'}), 500
-
-@app.route('/api/donations', methods=['POST'])
-@login_required
-def add_donation():
-    try:
-        data = request.get_json()
-        print(f"Received donation data: {data}")
-        
-        conn = get_db_connection()
-        if not conn:
-            print("Database connection failed")
-            return jsonify({'error': 'Database connection failed'}), 500
-            
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO donations (camp_id, donation_type, quantity, donor_name, donation_date, notes)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            RETURNING id
-        """, (data.get('camp_id'), data['donation_type'], data['quantity'], 
-              data.get('donor_name', ''), data['donation_date'], data.get('notes', '')))
-        
-        donation_id = cursor.fetchone()[0]
-        conn.commit()
-        cursor.close()
-        conn.close()
-        
-        print(f"Successfully added donation with ID: {donation_id}")
-        return jsonify({'message': 'Donation added successfully', 'id': donation_id})
-        
-    except Exception as e:
-        print(f"Error adding donation: {str(e)}")
-        return jsonify({'error': f'Failed to add donation: {str(e)}'}), 500
-
-@app.route('/api/donations/<int:donation_id>', methods=['PUT'])
-@login_required
-def update_donation(donation_id):
-    data = request.get_json()
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({'error': 'Database connection failed'}), 500
-    cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE donations 
-        SET camp_id = %s, donation_type = %s, quantity = %s, donor_name = %s, donation_date = %s, notes = %s
-        WHERE id = %s
-    """, (data.get('camp_id'), data['donation_type'], data['quantity'], 
-          data.get('donor_name', ''), data['donation_date'], data.get('notes', ''), donation_id))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    return jsonify({'message': 'Donation updated successfully'})
-
-@app.route('/api/donations/<int:donation_id>', methods=['DELETE'])
-@login_required
-def delete_donation(donation_id):
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({'error': 'Database connection failed'}), 500
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM donations WHERE id = %s", (donation_id,))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    return jsonify({'message': 'Donation deleted successfully'})
-
-# Analytics Dashboard APIs
-@app.route('/api/analytics/dashboard')
-@login_required
-def get_dashboard_analytics():
-    try:
-        conn = get_db_connection()
-        if not conn:
-            print("Database connection failed for analytics")
-            return jsonify({'error': 'Database connection failed'}), 500
-            
-        cursor = conn.cursor()
-        
-        cursor.execute("SELECT COUNT(*) as total FROM volunteers")
-        total_volunteers = cursor.fetchone()[0]
-        
-        cursor.execute("SELECT COUNT(*) as total FROM camps")
-        total_camps = cursor.fetchone()[0]
-        
-        # Handle medical_summary table that might not exist
-        try:
-            cursor.execute("SELECT COALESCE(SUM(total_patients), 0) as total FROM medical_summary")
-            total_beneficiaries = cursor.fetchone()[0]
-        except:
-            total_beneficiaries = 0
-        
-        cursor.execute("SELECT COALESCE(SUM(quantity), 0) as total FROM donations")
-        total_donations = cursor.fetchone()[0]
-        
-        cursor.execute("SELECT type, COUNT(*) as count FROM camps GROUP BY type")
-        camp_types_data = cursor.fetchall()
-        camp_types = [{'type': row[0], 'count': row[1]} for row in camp_types_data]
-        
-        cursor.execute("""
-            SELECT TO_CHAR(camp_date, 'YYYY-MM') as month, COUNT(*) as camps
-            FROM camps 
-            WHERE camp_date >= CURRENT_DATE - INTERVAL '12 months'
-            GROUP BY TO_CHAR(camp_date, 'YYYY-MM')
-            ORDER BY month
-        """)
-        monthly_data = cursor.fetchall()
-        monthly_trends = [{'month': row[0], 'camps': row[1]} for row in monthly_data]
-        
-        cursor.close()
-        conn.close()
-        
-        print(f"Analytics loaded: {total_volunteers} volunteers, {total_camps} camps")
-        return jsonify({
-            'total_volunteers': total_volunteers,
-            'total_camps': total_camps,
-            'total_beneficiaries': total_beneficiaries,
-            'total_donations': total_donations,
-            'camp_types': camp_types,
-            'monthly_trends': monthly_trends
-        })
-        
-    except Exception as e:
-        print(f"Error loading analytics: {str(e)}")
-        return jsonify({'error': f'Failed to load analytics: {str(e)}'}), 500
-
-# PDF Report Generation
-@app.route('/api/reports/generate-pdf')
-@login_required
-def generate_pdf_report():
-    try:
-        from reportlab.lib.pagesizes import letter, A4
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib.units import inch
-        from reportlab.lib import colors
-        from reportlab.pdfgen import canvas
-        from io import BytesIO
-        import datetime
-        
-        # Get data from database
-        conn = get_db_connection()
-        if not conn:
-            return jsonify({'error': 'Database connection failed'}), 500
-            
-        cursor = conn.cursor()
-        
-        # Get volunteers data
-        cursor.execute("SELECT name, email, phone, role, join_date, status FROM volunteers ORDER BY join_date DESC")
-        volunteers = cursor.fetchall()
-        
-        # Get camps data
-        cursor.execute("SELECT name, type, location, camp_date, status FROM camps ORDER BY camp_date DESC")
-        camps = cursor.fetchall()
-        
-        # Get donations data
-        cursor.execute("SELECT donation_type, quantity, donor_name, donation_date FROM donations ORDER BY donation_date DESC")
-        donations = cursor.fetchall()
-        
-        cursor.close()
-        conn.close()
-        
-        # Create PDF
-        buffer = BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=A4)
-        styles = getSampleStyleSheet()
-        story = []
-        
-        # Title
-        title_style = ParagraphStyle(
-            'CustomTitle',
-            parent=styles['Heading1'],
-            fontSize=24,
-            spaceAfter=30,
-            alignment=1  # Center alignment
-        )
-        
-        story.append(Paragraph("Mathruseva Foundation - Impact Report", title_style))
-        story.append(Spacer(1, 20))
-        
-        # Report date
-        current_date = datetime.datetime.now().strftime("%B %d, %Y")
-        story.append(Paragraph(f"Generated on: {current_date}", styles["Normal"]))
-        story.append(Spacer(1, 30))
-        
-        # Volunteers Section
-        story.append(Paragraph("Volunteers Summary", styles["Heading2"]))
-        story.append(Spacer(1, 12))
-        
-        if volunteers:
-            # Create volunteers table
-            volunteer_data = [["Name", "Email", "Phone", "Role", "Join Date", "Status"]]
-            for vol in volunteers:
-                volunteer_data.append([
-                    vol[0],  # name
-                    vol[1],  # email
-                    vol[2] if vol[2] else "N/A",  # phone
-                    vol[3],  # role
-                    vol[4].strftime("%Y-%m-%d") if vol[4] else "N/A",  # join_date
-                    vol[5]   # status
-                ])
-            
-            volunteer_table = Table(volunteer_data, repeatRows=1)
-            volunteer_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, 0), 12),
-                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-                ('GRID', (0, 0), (-1, -1), 1, colors.black)
-            ]))
-            
-            story.append(volunteer_table)
-            story.append(Paragraph(f"Total Volunteers: {len(volunteers)}", styles["Normal"]))
-        else:
-            story.append(Paragraph("No volunteers found.", styles["Normal"]))
-        
-        story.append(Spacer(1, 30))
-        
-        # Camps Section
-        story.append(Paragraph("Medical Camps Summary", styles["Heading2"]))
-        story.append(Spacer(1, 12))
-        
-        if camps:
-            # Create camps table
-            camp_data = [["Camp Name", "Type", "Location", "Date", "Status"]]
-            for camp in camps:
-                camp_data.append([
-                    camp[0],  # name
-                    camp[1],  # type
-                    camp[2],  # location
-                    camp[3].strftime("%Y-%m-%d") if camp[3] else "N/A",  # camp_date
-                    camp[4]   # status
-                ])
-            
-            camp_table = Table(camp_data, repeatRows=1)
-            camp_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, 0), 12),
-                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                ('BACKGROUND', (0, 1), (-1, -1), colors.lightblue),
-                ('GRID', (0, 0), (-1, -1), 1, colors.black)
-            ]))
-            
-            story.append(camp_table)
-            story.append(Paragraph(f"Total Camps: {len(camps)}", styles["Normal"]))
-        else:
-            story.append(Paragraph("No camps found.", styles["Normal"]))
-        
-        story.append(Spacer(1, 30))
-        
-        # Donations Section
-        story.append(Paragraph("Donations Summary", styles["Heading2"]))
-        story.append(Spacer(1, 12))
-        
-        if donations:
-            # Create donations table
-            donation_data = [["Donation Type", "Quantity", "Donor Name", "Date"]]
-            for donation in donations:
-                donation_data.append([
-                    donation[0],  # donation_type
-                    str(donation[1]),  # quantity
-                    donation[2] if donation[2] else "Anonymous",  # donor_name
-                    donation[3].strftime("%Y-%m-%d") if donation[3] else "N/A"  # donation_date
-                ])
-            
-            donation_table = Table(donation_data, repeatRows=1)
-            donation_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, 0), 12),
-                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                ('BACKGROUND', (0, 1), (-1, -1), colors.lightgreen),
-                ('GRID', (0, 0), (-1, -1), 1, colors.black)
-            ]))
-            
-            story.append(donation_table)
-            story.append(Paragraph(f"Total Donations Recorded: {len(donations)}", styles["Normal"]))
-        else:
-            story.append(Paragraph("No donations found.", styles["Normal"]))
-        
-        # Footer
-        story.append(Spacer(1, 30))
-        story.append(Paragraph("Thank you for supporting Mathruseva Foundation!", styles["Normal"]))
-        
-        # Build PDF
-        doc.build(story)
-        
-        # Return PDF
-        buffer.seek(0)
-        pdf_data = buffer.getvalue()
-        buffer.close()
-        
-        from flask import send_file
-        return send_file(
-            BytesIO(pdf_data),
-            mimetype='application/pdf',
-            as_attachment=False,
-            download_name=f'mathruseva_report_{datetime.datetime.now().strftime("%Y%m%d")}.pdf'
-        )
-        
-    except Exception as e:
-        print(f"Error generating PDF: {str(e)}")
-        return jsonify({'error': f'Failed to generate PDF: {str(e)}'}), 500
-
-# Media Management APIs
-@app.route('/api/media/upload', methods=['POST'])
-@login_required
-def upload_media():
-    try:
-        # Handle file upload
-        if 'mediaFile' in request.files:
-            file = request.files['mediaFile']
-            if file.filename != '':
-                # Save file to uploads directory
-                import os
-                import uuid
-                from werkzeug.utils import secure_filename
-                
-                # Create uploads directory if it doesn't exist
-                upload_dir = os.path.join(os.getcwd(), 'static', 'uploads')
-                if not os.path.exists(upload_dir):
-                    os.makedirs(upload_dir)
-                
-                # Generate unique filename
-                filename = secure_filename(file.filename)
-                unique_filename = f"{uuid.uuid4()}_{filename}"
-                file_path = os.path.join(upload_dir, unique_filename)
-                
-                # Save file
-                file.save(file_path)
-                
-                # Generate URL for the file
-                media_url = f"/static/uploads/{unique_filename}"
-                
-                # Get other form data
-                camp_id = request.form.get('camp_id')
-                media_type = request.form.get('media_type')
-                caption = request.form.get('caption', '')
-                
-                # Auto-detect media type if not specified
-                if not media_type:
-                    media_type = 'photo' if file.content_type.startswith('image/') else 'video'
-                
-        else:
-            # Fallback to URL-based upload (for backward compatibility)
-            data = request.get_json()
-            camp_id = data.get('camp_id')
-            media_type = data.get('media_type')
-            media_url = data.get('media_url')
-            caption = data.get('caption', '')
-        
-        if not camp_id or not media_type or not media_url:
-            return jsonify({'error': 'Missing required fields'}), 400
-        
-        if media_type not in ['photo', 'video']:
-            return jsonify({'error': 'Invalid media type'}), 400
-        
-        conn = get_db_connection()
-        if not conn:
-            return jsonify({'error': 'Database connection failed'}), 500
-            
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO camp_media (camp_id, media_type, media_url, caption)
-            VALUES (%s, %s, %s, %s)
-            RETURNING id
-        """, (camp_id, media_type, media_url, caption))
-        
-        media_id = cursor.fetchone()[0]
-        conn.commit()
-        cursor.close()
-        conn.close()
-        
-        return jsonify({'message': 'Media uploaded successfully', 'id': media_id})
-        
-    except Exception as e:
-        print(f"Error uploading media: {str(e)}")
-        return jsonify({'error': f'Failed to upload media: {str(e)}'}), 500
-
-@app.route('/api/media/camp/<int:camp_id>', methods=['GET'])
-@login_required
-def get_camp_media(camp_id):
-    try:
-        conn = get_db_connection()
-        if not conn:
-            return jsonify({'error': 'Database connection failed'}), 500
-            
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT id, media_type, media_url, caption, upload_date
-            FROM camp_media 
-            WHERE camp_id = %s 
-            ORDER BY upload_date DESC
-        """, (camp_id,))
-        
-        media_items = []
-        for row in cursor.fetchall():
-            media_items.append({
-                'id': row[0],
-                'media_type': row[1],
-                'media_url': row[2],
-                'caption': row[3],
-                'upload_date': row[4].isoformat() if row[4] else None
-            })
-        
-        cursor.close()
-        conn.close()
-        
-        return jsonify({'media': media_items})
-        
-    except Exception as e:
-        print(f"Error fetching camp media: {str(e)}")
-        return jsonify({'error': f'Failed to fetch media: {str(e)}'}), 500
-
-@app.route('/api/media/all', methods=['GET'])
-@login_required
-def get_all_media():
-    try:
-        conn = get_db_connection()
-        if not conn:
-            return jsonify({'error': 'Database connection failed'}), 500
-            
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT cm.id, cm.camp_id, cm.media_type, cm.media_url, cm.caption, 
-                   cm.upload_date, c.name as camp_name, c.location as camp_location
-            FROM camp_media cm
-            JOIN camps c ON cm.camp_id = c.id
-            ORDER BY cm.upload_date DESC
-        """)
-        
-        media_items = []
-        for row in cursor.fetchall():
-            media_items.append({
-                'id': row[0],
-                'camp_id': row[1],
-                'media_type': row[2],
-                'media_url': row[3],
-                'caption': row[4],
-                'upload_date': row[5].isoformat() if row[5] else None,
-                'camp_name': row[6],
-                'camp_location': row[7]
-            })
-        
-        cursor.close()
-        conn.close()
-        
-        return jsonify({'media': media_items})
-        
-    except Exception as e:
-        print(f"Error fetching all media: {str(e)}")
-        return jsonify({'error': f'Failed to fetch media: {str(e)}'}), 500
-
-@app.route('/api/media/<int:media_id>', methods=['DELETE'])
-@login_required
-def delete_media(media_id):
-    try:
-        conn = get_db_connection()
-        if not conn:
-            return jsonify({'error': 'Database connection failed'}), 500
-            
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM camp_media WHERE id = %s", (media_id,))
-        
-        if cursor.rowcount == 0:
+        conn = get_db()
+        if conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM volunteers WHERE id = %s", (volunteer_id,))
+            conn.commit()
             cursor.close()
             conn.close()
-            return jsonify({'error': 'Media not found'}), 404
+            return jsonify({'success': True, 'message': 'Volunteer deleted successfully'})
+        else:
+            return jsonify({'error': 'Database connection failed'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/camps/<int:camp_id>', methods=['DELETE'])
+def delete_camp(camp_id):
+    try:
+        conn = get_db()
+        if conn:
+            cursor = conn.cursor()
+            
+            # First check if camp has related records
+            cursor.execute("SELECT COUNT(*) FROM volunteer_attendance WHERE camp_id = %s", (camp_id,))
+            attendance_count = cursor.fetchone()[0]
+            
+            cursor.execute("SELECT COUNT(*) FROM camp_media WHERE camp_id = %s", (camp_id,))
+            media_count = cursor.fetchone()[0]
+            
+            if attendance_count > 0 or media_count > 0:
+                cursor.close()
+                conn.close()
+                return jsonify({
+                    'error': f'Cannot delete camp. It has {attendance_count} attendance records and {media_count} media files. Please delete these first or mark camp as completed instead.',
+                    'has_dependencies': True,
+                    'attendance_count': attendance_count,
+                    'media_count': media_count
+                }), 400
+            
+            # If no dependencies, proceed with deletion
+            cursor.execute("DELETE FROM camps WHERE id = %s", (camp_id,))
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return jsonify({'success': True, 'message': 'Camp deleted successfully'})
+        else:
+            return jsonify({'error': 'Database connection failed'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/donations/<int:donation_id>', methods=['DELETE'])
+def delete_donation(donation_id):
+    try:
+        conn = get_db()
+        if conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM donations WHERE id = %s", (donation_id,))
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return jsonify({'success': True, 'message': 'Donation deleted successfully'})
+        else:
+            return jsonify({'error': 'Database connection failed'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/media/<int:media_id>', methods=['DELETE'])
+def delete_media(media_id):
+    try:
+        conn = get_db()
+        if conn:
+            cursor = conn.cursor()
+            # First get file path to delete physical file
+            cursor.execute("SELECT file_path FROM media WHERE id = %s", (media_id,))
+            result = cursor.fetchone()
+            
+            if result:
+                file_path = result[0]
+                # Delete from database
+                cursor.execute("DELETE FROM media WHERE id = %s", (media_id,))
+                conn.commit()
+                
+                # Note: Physical file deletion would require file system access
+                # For now, we'll just remove from database
+                
+                cursor.close()
+                conn.close()
+                return jsonify({'success': True, 'message': 'Media deleted successfully'})
+            else:
+                cursor.close()
+                conn.close()
+                return jsonify({'error': 'Media not found'}), 404
+        else:
+            return jsonify({'error': 'Database connection failed'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/volunteers/<int:volunteer_id>', methods=['PUT'])
+def update_volunteer(volunteer_id):
+    try:
+        data = request.get_json()
+        conn = get_db()
+        if conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE volunteers 
+                SET name = %s, email = %s, phone = %s, role = %s, status = %s 
+                WHERE id = %s
+            """, (data['name'], data['email'], data['phone'], data['role'], data['status'], volunteer_id))
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return jsonify({'success': True, 'message': 'Volunteer updated successfully'})
+        else:
+            return jsonify({'error': 'Database connection failed'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/camps/<int:camp_id>', methods=['PUT'])
+def update_camp(camp_id):
+    try:
+        data = request.get_json()
+        conn = get_db()
+        if conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE camps 
+                SET name = %s, type = %s, location = %s, camp_date = %s, description = %s, status = %s 
+                WHERE id = %s
+            """, (data['name'], data['type'], data['location'], data['camp_date'], data['description'], data['status'], camp_id))
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return jsonify({'success': True, 'message': 'Camp updated successfully'})
+        else:
+            return jsonify({'error': 'Database connection failed'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/donations/<int:donation_id>', methods=['PUT'])
+def update_donation(donation_id):
+    try:
+        data = request.get_json()
+        conn = get_db()
+        if conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE donations 
+                SET donation_type = %s, quantity = %s, amount = %s, donor_name = %s, donation_date = %s 
+                WHERE id = %s
+            """, (data['donation_type'], data['quantity'], data['amount'], data['donor_name'], data['donation_date'], donation_id))
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return jsonify({'success': True, 'message': 'Donation updated successfully'})
+        else:
+            return jsonify({'error': 'Database connection failed'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/attendance', methods=['GET', 'POST'])
+def attendance_api():
+    if request.method == 'GET':
+        try:
+            conn = get_db()
+            if conn:
+                cursor = conn.cursor()
+                
+                # Get query parameters for filtering
+                camp_id = request.args.get('camp_id')
+                date_filter = request.args.get('date')
+                
+                # Build query based on filters
+                query = """
+                    SELECT at.*, v.name as volunteer_name, c.name as camp_name 
+                    FROM attendance_tracking at
+                    LEFT JOIN volunteers v ON at.volunteer_id = v.id
+                    LEFT JOIN camps c ON at.camp_id = c.id
+                """
+                params = []
+                
+                if camp_id:
+                    query += " WHERE at.camp_id = %s"
+                    params.append(camp_id)
+                
+                if date_filter:
+                    if camp_id:
+                        query += " AND at.attendance_date = %s"
+                    else:
+                        query += " WHERE at.attendance_date = %s"
+                    params.append(date_filter)
+                
+                query += " ORDER BY at.attendance_date DESC, at.check_in_time DESC"
+                
+                cursor.execute(query, tuple(params) if params else ())
+                attendance_records = cursor.fetchall()
+                cursor.close()
+                conn.close()
+                
+                # Convert to list of dictionaries
+                attendance_list = []
+                for record in attendance_records:
+                    attendance_list.append({
+                        'id': record[0],
+                        'volunteer_id': record[1],
+                        'camp_id': record[2],
+                        'attendance_date': str(record[3]),
+                        'check_in_time': str(record[4]) if record[4] else None,
+                        'check_out_time': str(record[5]) if record[5] else None,
+                        'status': record[6],
+                        'notes': record[7],
+                        'volunteer_name': record[10],
+                        'camp_name': record[11]
+                    })
+                
+                return jsonify({'attendance': attendance_list})
+            else:
+                return jsonify({'attendance': []})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+    
+    elif request.method == 'POST':
+        try:
+            data = request.get_json()
+            conn = get_db()
+            if conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO attendance_tracking (volunteer_id, camp_id, attendance_date, check_in_time, check_out_time, status, notes)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    data['volunteer_id'], 
+                    data.get('camp_id'), 
+                    data['attendance_date'], 
+                    data.get('check_in_time'), 
+                    data.get('check_out_time'), 
+                    data['status'], 
+                    data.get('notes')
+                ))
+                conn.commit()
+                cursor.close()
+                conn.close()
+                return jsonify({'success': True, 'message': 'Attendance marked successfully'})
+            else:
+                return jsonify({'error': 'Database connection failed'}), 500
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+@app.route('/api/attendance/<int:attendance_id>', methods=['PUT'])
+def update_attendance(attendance_id):
+    try:
+        data = request.get_json()
+        conn = get_db()
+        if conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE attendance_tracking 
+                SET volunteer_id = %s, camp_id = %s, attendance_date = %s, check_in_time = %s, check_out_time = %s, status = %s, notes = %s 
+                WHERE id = %s
+            """, (
+                data['volunteer_id'], 
+                data.get('camp_id'), 
+                data['attendance_date'], 
+                data.get('check_in_time'), 
+                data.get('check_out_time'), 
+                data['status'], 
+                data.get('notes'), 
+                attendance_id
+            ))
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return jsonify({'success': True, 'message': 'Attendance updated successfully'})
+        else:
+            return jsonify({'error': 'Database connection failed'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/attendance/<int:attendance_id>', methods=['DELETE'])
+def delete_attendance(attendance_id):
+    try:
+        conn = get_db()
+        if conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM attendance_tracking WHERE id = %s", (attendance_id,))
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return jsonify({'success': True, 'message': 'Attendance record deleted successfully'})
+        else:
+            return jsonify({'error': 'Database connection failed'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/attendance/stats', methods=['GET'])
+def attendance_stats_api():
+    try:
+        conn = get_db()
+        if conn:
+            cursor = conn.cursor()
+            
+            # Get attendance statistics
+            cursor.execute("""
+                SELECT 
+                    COUNT(*) as total_records,
+                    COUNT(CASE WHEN status = 'present' THEN 1 END) as present_count,
+                    COUNT(CASE WHEN status = 'absent' THEN 1 END) as absent_count,
+                    COUNT(CASE WHEN status = 'late' THEN 1 END) as late_count,
+                    COUNT(CASE WHEN status = 'excused' THEN 1 END) as excused_count,
+                    COUNT(DISTINCT volunteer_id) as unique_volunteers,
+                    COUNT(DISTINCT camp_id) as unique_camps
+                FROM attendance_tracking
+            """)
+            stats = cursor.fetchone()
+            
+            # Get today's attendance
+            today = datetime.now().strftime('%Y-%m-%d')
+            cursor.execute("""
+                SELECT COUNT(*) as today_present
+                FROM attendance_tracking
+                WHERE attendance_date = %s AND status = 'present'
+            """, (today,))
+            today_stats = cursor.fetchone()
+            
+            cursor.close()
+            conn.close()
+            
+            return jsonify({
+                'total_records': stats[0],
+                'present_count': stats[1],
+                'absent_count': stats[2],
+                'late_count': stats[3],
+                'excused_count': stats[4],
+                'unique_volunteers': stats[5],
+                'unique_camps': stats[6],
+                'today_present': today_stats[0]
+            })
+        else:
+            return jsonify({'error': 'Database connection failed'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/generate-pdf/<report_type>')
+def generate_pdf_report(report_type):
+    if not REPORTLAB_AVAILABLE:
+        return jsonify({'error': 'PDF generation not available. ReportLab library is not installed.'}), 500
+    
+    try:
+        conn = get_db()
+        if not conn:
+            return jsonify({'error': 'Database connection failed'}), 500
         
-        conn.commit()
+        cursor = conn.cursor()
+        
+        # Get data based on report type
+        if report_type == 'volunteers':
+            cursor.execute("""
+                SELECT v.name, v.email, v.phone, v.role, v.status, v.join_date
+                FROM volunteers v
+                ORDER BY v.join_date DESC
+            """)
+            data = cursor.fetchall()
+            title = "Volunteers Report"
+            headers = ['Name', 'Email', 'Phone', 'Role', 'Status', 'Join Date']
+            
+        elif report_type == 'camps':
+            cursor.execute("""
+                SELECT c.name, c.type, c.location, c.camp_date, c.status, c.description
+                FROM camps c
+                ORDER BY c.camp_date DESC
+            """)
+            data = cursor.fetchall()
+            title = "Camps Report"
+            headers = ['Camp Name', 'Type', 'Location', 'Date', 'Status', 'Description']
+            
+        elif report_type == 'donations':
+            cursor.execute("""
+                SELECT d.donation_type, d.quantity, d.amount, d.donor_name, d.donation_date
+                FROM donations d
+                ORDER BY d.donation_date DESC
+            """)
+            data = cursor.fetchall()
+            title = "Donations Report"
+            headers = ['Type', 'Quantity', 'Amount', 'Donor', 'Date']
+            
+        elif report_type == 'attendance':
+            cursor.execute("""
+                SELECT at.attendance_date, v.name as volunteer_name, c.name as camp_name, 
+                       at.check_in_time, at.check_out_time, at.status, at.notes
+                FROM attendance_tracking at
+                LEFT JOIN volunteers v ON at.volunteer_id = v.id
+                LEFT JOIN camps c ON at.camp_id = c.id
+                ORDER BY at.attendance_date DESC
+            """)
+            data = cursor.fetchall()
+            title = "Attendance Report"
+            headers = ['Date', 'Volunteer', 'Camp', 'Check In', 'Check Out', 'Status', 'Notes']
+            
+        elif report_type == 'analytics':
+            # Get comprehensive analytics data
+            cursor.execute("SELECT COUNT(*) FROM volunteers")
+            total_volunteers = cursor.fetchone()[0]
+            
+            cursor.execute("SELECT COUNT(*) FROM camps")
+            total_camps = cursor.fetchone()[0]
+            
+            cursor.execute("SELECT COALESCE(SUM(amount), 0) FROM donations")
+            total_donations = cursor.fetchone()[0]
+            
+            cursor.execute("""
+                SELECT COUNT(CASE WHEN status = 'present' THEN 1 END) as present,
+                       COUNT(CASE WHEN status = 'absent' THEN 1 END) as absent,
+                       COUNT(CASE WHEN status = 'late' THEN 1 END) as late
+                FROM attendance_tracking
+            """)
+            attendance_stats = cursor.fetchone()
+            
+            data = [
+                ['Total Volunteers', total_volunteers],
+                ['Total Camps', total_camps],
+                ['Total Donations ($)', total_donations],
+                ['Present', attendance_stats[0]],
+                ['Absent', attendance_stats[1]],
+                ['Late', attendance_stats[2]]
+            ]
+            title = "Analytics Summary Report"
+            headers = ['Metric', 'Count']
+            
+        else:
+            cursor.close()
+            conn.close()
+            return jsonify({'error': 'Invalid report type'}), 400
+        
         cursor.close()
         conn.close()
         
-        return jsonify({'message': 'Media deleted successfully'})
+        # Create PDF using ReportLab if available, otherwise use simple HTML
+        if REPORTLAB_AVAILABLE:
+            try:
+                from reportlab.lib.pagesizes import letter, A4
+                from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+                from reportlab.lib.styles import getSampleStyleSheet
+                from reportlab.lib.units import inch
+                from reportlab.lib import colors
+                
+                buffer = io.BytesIO()
+                doc = SimpleDocTemplate(buffer, pagesize=letter,
+                                    rightMargin=72, leftMargin=72,
+                                    topMargin=72, bottomMargin=18)
+                
+                # Get styles
+                styles = getSampleStyleSheet()
+                title_style = styles['Heading1']
+                normal_style = styles['Normal']
+                
+                # Add title
+                doc.build([
+                    Paragraph(title, title_style),
+                    Spacer(1, 12),
+                    Paragraph(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", normal_style),
+                    Spacer(1, 12),
+                ])
+                
+                # Add table
+                if report_type == 'analytics':
+                    # Special formatting for analytics report
+                    table_data = [[header, str(value)] for header, value in zip(headers, data)]
+                else:
+                    table_data = [headers] + [[str(item) if item is not None else '' for item in row] for row in data]
+                
+                table = Table(table_data)
+                table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, -1), colors.white),
+                    ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 12),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+                    ('BACKGROUND', (0, 1), (-1, -1), colors.grey),
+                    ('GRID', (0, 0), (-1, -1), 1, colors.black)
+                ]))
+                
+                table.wrapOn = True
+                doc.build([table])
+                
+                # Prepare file for download
+                buffer.seek(0)
+                filename = f"{report_type}_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+                
+                return send_file(
+                    buffer,
+                    as_attachment=True,
+                    download_name=filename,
+                    mimetype='application/pdf'
+                )
+                
+            except Exception as e:
+                print(f"ReportLab error: {e}")
+                # Fallback to HTML if ReportLab fails
+                pass
+        
+        # Fallback HTML approach (always works)
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>{title}</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; margin: 20px; }}
+                h1 {{ color: #333; border-bottom: 2px solid #333; padding-bottom: 10px; }}
+                table {{ border-collapse: collapse; width: 100%; margin-top: 20px; }}
+                th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+                th {{ background-color: #f2f2f2; font-weight: bold; }}
+                .header-info {{ margin-bottom: 20px; padding: 10px; background-color: #f9f9f9; border-radius: 5px; }}
+                .footer {{ margin-top: 30px; padding: 10px; background-color: #f8f9fa; border-top: 1px solid #ddd; font-size: 12px; color: #666; }}
+            </style>
+        </head>
+        <body>
+            <div class="header-info">
+                <h1>{title}</h1>
+                <p><strong>Generated on:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+                <p><strong>Report Type:</strong> {report_type.replace('_', ' ').title()}</p>
+            </div>
+            
+            <table>
+                <tr>
+        """
+        
+        # Add table headers
+        for header in headers:
+            html_content += f"<th>{header}</th>"
+        html_content += "</tr>"
+        
+        # Add table data
+        if report_type == 'analytics':
+            for metric, value in data:
+                html_content += f"<tr><td><strong>{metric}</strong></td><td>{value}</td></tr>"
+        else:
+            for row in data:
+                html_content += "<tr>"
+                for item in row:
+                    html_content += f"<td>{str(item) if item is not None else ''}</td>"
+                html_content += "</tr>"
+        
+        html_content += f"""
+            </table>
+            
+            <div class="footer">
+                <p><em>This report was generated from the Mathruseva Foundation Volunteer Management System.</em></p>
+                <p><em>For any questions, please contact the system administrator.</em></p>
+            </div>
+        </body>
+        </html>
+        """
+        
+        # Create PDF response with proper headers
+        response = make_response(html_content)
+        response.headers['Content-Type'] = 'application/pdf'
+        response.headers['Content-Disposition'] = f'attachment; filename={report_type}_report_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
+        response.headers['Content-Transfer-Encoding'] = 'binary'
+        
+        return response
         
     except Exception as e:
-        print(f"Error deleting media: {str(e)}")
-        return jsonify({'error': f'Failed to delete media: {str(e)}'}), 500
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/reports/attendance/monthly')
+def monthly_attendance_report():
+    try:
+        conn = get_db()
+        if not conn:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = conn.cursor()
+        
+        # Get monthly attendance data
+        cursor.execute("""
+            SELECT DATE_FORMAT(attendance_date, '%Y-%m') as month,
+                   COUNT(*) as total_days,
+                   COUNT(CASE WHEN status = 'present' THEN 1 END) as present_days,
+                   COUNT(CASE WHEN status = 'absent' THEN 1 END) as absent_days,
+                   COUNT(CASE WHEN status = 'late' THEN 1 END) as late_days
+            FROM attendance_tracking
+            WHERE attendance_date >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
+            GROUP BY DATE_FORMAT(attendance_date, '%Y-%m')
+            ORDER BY month DESC
+        """)
+        monthly_data = cursor.fetchall()
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({'monthly_attendance': monthly_data})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/recent-activity')
+def recent_activity():
+    try:
+        conn = get_db()
+        if not conn:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = conn.cursor()
+        
+        # Get recent activities from all tables
+        activities = []
+        
+        # Recent volunteers (last 5)
+        cursor.execute("""
+            SELECT 'volunteer' as activity_type, name, email, join_date as activity_date, 
+                   'New volunteer joined' as activity_description
+            FROM volunteers 
+            ORDER BY join_date DESC 
+            LIMIT 5
+        """)
+        volunteer_activities = cursor.fetchall()
+        for activity in volunteer_activities:
+            activities.append({
+                'type': 'volunteer',
+                'title': activity[1],
+                'description': activity[2],
+                'date': activity[3].strftime('%Y-%m-%d %H:%M'),
+                'badge': 'success'
+            })
+        
+        # Recent camps (last 5)
+        cursor.execute("""
+            SELECT 'camp' as activity_type, name, location, camp_date as activity_date,
+                   'New camp created' as activity_description
+            FROM camps 
+            ORDER BY camp_date DESC 
+            LIMIT 5
+        """)
+        camp_activities = cursor.fetchall()
+        for activity in camp_activities:
+            activities.append({
+                'type': 'camp',
+                'title': activity[1],
+                'description': f"{activity[2]} - {activity[3]}",
+                'date': activity[4].strftime('%Y-%m-%d %H:%M'),
+                'badge': 'info'
+            })
+        
+        # Recent donations (last 5)
+        cursor.execute("""
+            SELECT 'donation' as activity_type, donor_name, amount, donation_date as activity_date,
+                   CONCAT('Donation of ', donation_type, ' ($', amount, ')') as activity_description
+            FROM donations 
+            ORDER BY donation_date DESC 
+            LIMIT 5
+        """)
+        donation_activities = cursor.fetchall()
+        for activity in donation_activities:
+            activities.append({
+                'type': 'donation',
+                'title': activity[1],
+                'description': activity[2],
+                'date': activity[3].strftime('%Y-%m-%d %H:%M'),
+                'badge': 'warning'
+            })
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({'activities': activities})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/monthly-donations')
+def monthly_donations():
+    try:
+        conn = get_db()
+        if not conn:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = conn.cursor()
+        
+        # Get monthly donation totals
+        cursor.execute("""
+            SELECT DATE_FORMAT(donation_date, '%Y-%m') as month,
+                   COUNT(*) as donation_count,
+                   COALESCE(SUM(amount), 0) as total_amount
+            FROM donations 
+            WHERE donation_date >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
+            GROUP BY DATE_FORMAT(donation_date, '%Y-%m')
+            ORDER BY month DESC
+        """)
+        monthly_data = cursor.fetchall()
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({'monthly_donations': monthly_data})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/test')
+def test():
+    return render_template('test_volunteer.html')
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+    app.secret_key = 'mathruseva_foundation_2024_secure_key'
+    print("🚀 Starting Mathruseva Foundation app...")
+    print("📍 Running at: http://127.0.0.1:5000")
+    app.run(debug=True, port=5000)

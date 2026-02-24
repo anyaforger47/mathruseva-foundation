@@ -409,19 +409,6 @@ function loadAnalytics() {
     .then(data => {
         console.log('✅ Analytics loaded:', data);
         
-        // Handle empty or error response gracefully
-        if (!data || data.error) {
-            console.error('Analytics data not available:', data);
-            // Set default values if API fails
-            document.getElementById('totalVolunteers').textContent = '0';
-            document.getElementById('totalCamps').textContent = '0';
-            document.getElementById('totalDonations').textContent = '$0';
-            document.getElementById('presentToday').textContent = '0';
-            document.getElementById('activeVolunteers').textContent = '0';
-            document.getElementById('monthlyDonations').textContent = '$0';
-            return;
-        }
-        
         // Update dashboard stats
         document.getElementById('totalVolunteers').textContent = data.total_volunteers || 0;
         document.getElementById('totalCamps').textContent = data.total_camps || 0;
@@ -466,13 +453,6 @@ function loadAnalytics() {
     })
     .catch(error => {
         console.error('Error loading analytics:', error);
-        // Set default values on error
-        document.getElementById('totalVolunteers').textContent = '0';
-        document.getElementById('totalCamps').textContent = '0';
-        document.getElementById('totalDonations').textContent = '$0';
-        document.getElementById('presentToday').textContent = '0';
-        document.getElementById('activeVolunteers').textContent = '0';
-        document.getElementById('monthlyDonations').textContent = '$0';
     });
 }
 

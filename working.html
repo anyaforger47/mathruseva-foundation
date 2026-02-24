@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mathruseva Foundation - Working Version</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .card { margin: 20px 0; }
+        .chart-container { height: 300px; }
+        .nav-link { cursor: pointer; }
+        .content-section { display: none; }
+        .content-section.active { display: block; }
+        .navbar { margin-bottom: 30px; }
+        .stats-card { text-align: center; }
+        .stats-card h3 { font-size: 2rem; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="#">
+                <i class="fas fa-heart me-2"></i>Mathruseva Foundation
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link text-white" onclick="showSection('dashboard')">Dashboard</a>
+                <a class="nav-link text-white" onclick="showSection('attendance')">Attendance</a>
+                <a class="nav-link text-white" onclick="showSection('analytics')">Analytics</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- Dashboard Section -->
+        <div id="dashboard" class="content-section active">
+            <h2><i class="fas fa-tachometer-alt me-2"></i>Dashboard</h2>
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="card stats-card bg-primary text-white">
+                        <div class="card-body">
+                            <h5><i class="fas fa-users me-2"></i>Total Volunteers</h5>
+                            <h3 id="totalVolunteers">25</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card stats-card bg-success text-white">
+                        <div class="card-body">
+                            <h5><i class="fas fa-campground me-2"></i>Total Camps</h5>
+                            <h3 id="totalCamps">41</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card stats-card bg-warning text-white">
+                        <div class="card-body">
+                            <h5><i class="fas fa-donate me-2"></i>Total Donations</h5>
+                            <h3 id="totalDonations">$103,000</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Attendance Section -->
+        <div id="attendance" class="content-section">
+            <h2><i class="fas fa-user-check me-2"></i>Attendance Tracker</h2>
+            <button class="btn btn-primary mb-3" onclick="showAttendanceModal()">
+                <i class="fas fa-plus me-2"></i>Mark Attendance
+            </button>
+            
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="card stats-card bg-success text-white">
+                        <div class="card-body">
+                            <h5><i class="fas fa-check-circle me-2"></i>Present</h5>
+                            <h3 id="totalPresent">15</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card stats-card bg-danger text-white">
+                        <div class="card-body">
+                            <h5><i class="fas fa-times-circle me-2"></i>Absent</h5>
+                            <h3 id="totalAbsent">3</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card stats-card bg-warning text-white">
+                        <div class="card-body">
+                            <h5><i class="fas fa-clock me-2"></i>Late</h5>
+                            <h3 id="totalLate">2</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card stats-card bg-info text-white">
+                        <div class="card-body">
+                            <h5><i class="fas fa-percentage me-2"></i>Attendance Rate</h5>
+                            <h3 id="attendanceRate">83%</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-body">
+                    <h5><i class="fas fa-list me-2"></i>Attendance Records</h5>
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>Volunteer</th>
+                                    <th>Camp</th>
+                                    <th>Date</th>
+                                    <th>Check In</th>
+                                    <th>Check Out</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="attendanceTableBody">
+                                <tr>
+                                    <td><i class="fas fa-user me-2"></i>John Smith</td>
+                                    <td><i class="fas fa-campground me-2"></i>Eye Camp Mumbai</td>
+                                    <td>2024-02-15</td>
+                                    <td>09:00</td>
+                                    <td>17:00</td>
+                                    <td><span class="badge bg-success">Present</span></td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-user me-2"></i>Sarah Johnson</td>
+                                    <td><i class="fas fa-campground me-2"></i>Blood Donation Drive</td>
+                                    <td>2024-02-20</td>
+                                    <td>09:30</td>
+                                    <td>16:30</td>
+                                    <td><span class="badge bg-warning">Late</span></td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-user me-2"></i>Mike Wilson</td>
+                                    <td><i class="fas fa-campground me-2"></i>General Health Camp</td>
+                                    <td>2024-02-25</td>
+                                    <td>10:00</td>
+                                    <td>15:00</td>
+                                    <td><span class="badge bg-danger">Absent</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Analytics Section -->
+        <div id="analytics" class="content-section">
+            <h2><i class="fas fa-chart-line me-2"></i>Analytics Dashboard</h2>
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <h5><i class="fas fa-user-chart me-2"></i>Volunteer Performance</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="chart-container">
+                                <canvas id="volunteerPerformanceChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header bg-success text-white">
+                            <h5><i class="fas fa-hand-holding-heart me-2"></i>Donation Impact</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="chart-container">
+                                <canvas id="donationImpactChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="row mt-4">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header bg-warning text-white">
+                            <h5><i class="fas fa-chart-line me-2"></i>Weekly Attendance Trend</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="chart-container">
+                                <canvas id="attendanceTrendChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header bg-info text-white">
+                            <h5><i class="fas fa-chart-pie me-2"></i>Camp Distribution</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="chart-container">
+                                <canvas id="campDistributionChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Attendance Modal -->
+    <div class="modal fade" id="attendanceModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title"><i class="fas fa-user-plus me-2"></i>Mark Attendance</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="attendanceForm">
+                        <div class="mb-3">
+                            <label class="form-label"><i class="fas fa-user me-2"></i>Volunteer</label>
+                            <select class="form-select" id="attendanceVolunteer" required>
+                                <option value="">Select Volunteer</option>
+                                <option value="1">John Smith</option>
+                                <option value="2">Sarah Johnson</option>
+                                <option value="3">Mike Wilson</option>
+                                <option value="4">Emily Brown</option>
+                                <option value="5">David Lee</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label"><i class="fas fa-campground me-2"></i>Camp</label>
+                            <select class="form-select" id="attendanceCamp" required>
+                                <option value="">Select Camp</option>
+                                <option value="1">Eye Camp Mumbai</option>
+                                <option value="2">Blood Donation Drive</option>
+                                <option value="3">General Health Camp</option>
+                                <option value="4">Eye Camp Pune</option>
+                                <option value="5">Donation Drive Chennai</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label"><i class="fas fa-calendar me-2"></i>Date</label>
+                            <input type="date" class="form-control" id="attendanceDateModal" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label"><i class="fas fa-clock me-2"></i>Check In Time</label>
+                            <input type="time" class="form-control" id="checkInTime" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label"><i class="fas fa-clock me-2"></i>Check Out Time</label>
+                            <input type="time" class="form-control" id="checkOutTime">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label"><i class="fas fa-info-circle me-2"></i>Status</label>
+                            <select class="form-select" id="attendanceStatus" required>
+                                <option value="">Select Status</option>
+                                <option value="present">Present</option>
+                                <option value="absent">Absent</option>
+                                <option value="late">Late</option>
+                                <option value="half_day">Half Day</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label"><i class="fas fa-sticky-note me-2"></i>Notes</label>
+                            <textarea class="form-control" id="attendanceNotes" rows="3"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-2"></i>Cancel
+                    </button>
+                    <button type="button" class="btn btn-primary" onclick="markAttendance()">
+                        <i class="fas fa-check me-2"></i>Mark Attendance
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    
+    <script>
+        console.log('✅ Mathruseva Foundation App Loaded Successfully!');
+        
+        let currentSection = 'dashboard';
+        
+        function showSection(sectionId) {
+            console.log('🔄 Switching to section:', sectionId);
+            
+            // Hide all sections
+            document.querySelectorAll('.content-section').forEach(section => {
+                section.classList.remove('active');
+            });
+            
+            // Show selected section
+            const selectedSection = document.getElementById(sectionId);
+            if (selectedSection) {
+                selectedSection.classList.add('active');
+                console.log('✅ Section displayed:', sectionId);
+            } else {
+                console.error('❌ Section not found:', sectionId);
+            }
+            
+            currentSection = sectionId;
+            
+            // Load section-specific content
+            if (sectionId === 'analytics') {
+                console.log('📊 Initializing analytics charts...');
+                setTimeout(initializeCharts, 100);
+            } else if (sectionId === 'attendance') {
+                console.log('📝 Loading attendance data...');
+                loadAttendance();
+            }
+        }
+        
+        function showAttendanceModal() {
+            console.log('🔧 Opening attendance modal...');
+            const modal = new bootstrap.Modal(document.getElementById('attendanceModal'));
+            modal.show();
+            loadAttendanceOptions();
+        }
+        
+        function loadAttendanceOptions() {
+            // Set today's date
+            document.getElementById('attendanceDateModal').value = new Date().toISOString().split('T')[0];
+            console.log('📅 Set today\'s date');
+        }
+        
+        function markAttendance() {
+            console.log('✅ Marking attendance...');
+            
+            // Get form values
+            const volunteer = document.getElementById('attendanceVolunteer').value;
+            const camp = document.getElementById('attendanceCamp').value;
+            const date = document.getElementById('attendanceDateModal').value;
+            const status = document.getElementById('attendanceStatus').value;
+            
+            if (!volunteer || !camp || !date || !status) {
+                alert('⚠️ Please fill in all required fields');
+                return;
+            }
+            
+            // Add new row to table
+            const tbody = document.getElementById('attendanceTableBody');
+            const newRow = tbody.insertRow(0);
+            
+            const volunteerName = document.getElementById('attendanceVolunteer').options[document.getElementById('attendanceVolunteer').selectedIndex].text;
+            const campName = document.getElementById('attendanceCamp').options[document.getElementById('attendanceCamp').selectedIndex].text;
+            const checkIn = document.getElementById('checkInTime').value || '09:00';
+            const checkOut = document.getElementById('checkOutTime').value || '17:00';
+            
+            newRow.innerHTML = `
+                <td><i class="fas fa-user me-2"></i>${volunteerName}</td>
+                <td><i class="fas fa-campground me-2"></i>${campName}</td>
+                <td>${date}</td>
+                <td>${checkIn}</td>
+                <td>${checkOut}</td>
+                <td><span class="badge bg-${status === 'present' ? 'success' : status === 'absent' ? 'danger' : status === 'late' ? 'warning' : 'info'}">${status.charAt(0).toUpperCase() + status.slice(1)}</span></td>
+            `;
+            
+            // Update stats
+            updateAttendanceStats();
+            
+            // Close modal and reset form
+            const modal = bootstrap.Modal.getInstance(document.getElementById('attendanceModal'));
+            modal.hide();
+            document.getElementById('attendanceForm').reset();
+            
+            alert('✅ Attendance marked successfully!');
+            console.log('✅ Attendance marked and modal closed');
+        }
+        
+        function updateAttendanceStats() {
+            const present = parseInt(document.getElementById('totalPresent').textContent);
+            document.getElementById('totalPresent').textContent = present + 1;
+            
+            const total = present + 1 + parseInt(document.getElementById('totalAbsent').textContent) + parseInt(document.getElementById('totalLate').textContent);
+            const rate = Math.round(((present + 1) / total) * 100);
+            document.getElementById('attendanceRate').textContent = rate + '%';
+        }
+        
+        function loadAttendance() {
+            console.log('📊 Loading attendance statistics...');
+            // Stats are already loaded in HTML
+        }
+        
+        function initializeCharts() {
+            console.log('📊 Creating charts...');
+            
+            // Volunteer Performance Chart
+            const volunteerCtx = document.getElementById('volunteerPerformanceChart');
+            if (volunteerCtx) {
+                console.log('✅ Creating volunteer chart...');
+                new Chart(volunteerCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Active', 'Inactive', 'On Leave', 'New Volunteers'],
+                        datasets: [{
+                            data: [15, 3, 2, 5],
+                            backgroundColor: ['#28a745', '#dc3545', '#ffc107', '#17a2b8'],
+                            borderWidth: 2,
+                            borderColor: '#fff'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { 
+                                position: 'bottom',
+                                labels: { padding: 20 }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return context.label + ': ' + context.parsed + ' volunteers';
+                                    }
+                                }
+                            }
+                        },
+                        animation: {
+                            animateScale: true,
+                            animateRotate: true
+                        }
+                    }
+                });
+                console.log('✅ Volunteer chart created');
+            }
+            
+            // Donation Impact Chart
+            const donationCtx = document.getElementById('donationImpactChart');
+            if (donationCtx) {
+                console.log('✅ Creating donation chart...');
+                new Chart(donationCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+                        datasets: [{
+                            label: 'Donations ($)',
+                            data: [12000, 19000, 15000, 22000, 18000, 25000],
+                            backgroundColor: '#007bff',
+                            borderColor: '#0056b3',
+                            borderWidth: 2,
+                            borderRadius: 8,
+                            hoverBackgroundColor: '#0056b3'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return 'Donations: $' + context.parsed.y.toLocaleString();
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    callback: function(value) {
+                                        return '$' + value.toLocaleString();
+                                    }
+                                }
+                            }
+                        },
+                        animation: {
+                            duration: 1000,
+                            easing: 'easeInOutQuart'
+                        }
+                    }
+                });
+                console.log('✅ Donation chart created');
+            }
+            
+            // Attendance Trend Chart
+            const attendanceCtx = document.getElementById('attendanceTrendChart');
+            if (attendanceCtx) {
+                console.log('✅ Creating attendance trend chart...');
+                new Chart(attendanceCtx, {
+                    type: 'line',
+                    data: {
+                        labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                        datasets: [{
+                            label: 'Attendance Rate (%)',
+                            data: [85, 88, 92, 87, 90, 75, 70],
+                            borderColor: '#28a745',
+                            backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                            borderWidth: 3,
+                            fill: true,
+                            tension: 0.4,
+                            pointBackgroundColor: '#28a745',
+                            pointBorderColor: '#fff',
+                            pointBorderWidth: 2,
+                            pointRadius: 6,
+                            pointHoverRadius: 8
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return 'Attendance: ' + context.parsed.y + '%';
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                max: 100,
+                                ticks: {
+                                    callback: function(value) {
+                                        return value + '%';
+                                    }
+                                }
+                            }
+                        },
+                        animation: {
+                            duration: 1500,
+                            easing: 'easeInOutQuart'
+                        }
+                    }
+                });
+                console.log('✅ Attendance trend chart created');
+            }
+            
+            // Camp Distribution Chart
+            const campCtx = document.getElementById('campDistributionChart');
+            if (campCtx) {
+                console.log('✅ Creating camp distribution chart...');
+                new Chart(campCtx, {
+                    type: 'polarArea',
+                    data: {
+                        labels: ['Eye Camps', 'Blood Donation', 'General Health', 'Donation Drives'],
+                        datasets: [{
+                            data: [12, 8, 15, 6],
+                            backgroundColor: ['#007bff', '#dc3545', '#28a745', '#ffc107'],
+                            borderColor: ['#0056b3', '#c82333', '#1e7e34', '#d39e00'],
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { 
+                                position: 'bottom',
+                                labels: { padding: 15 }
+                            }
+                        },
+                        animation: {
+                            animateScale: true,
+                            animateRotate: true
+                        }
+                    }
+                });
+                console.log('✅ Camp distribution chart created');
+            }
+            
+            console.log('🎉 All charts initialized successfully!');
+        }
+        
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🚀 DOM loaded, initializing dashboard...');
+            console.log('✅ Dashboard ready!');
+        });
+    </script>
+</body>
+</html>

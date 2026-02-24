@@ -18,13 +18,7 @@
         .stats-card:hover {
             transform: translateY(-5px);
         }
-        .nav-link {
-            transition: all 0.3s ease;
-        }
-        .nav-link:hover {
-            background-color: #f8f9fa;
-            border-radius: 5px;
-        }
+        
         .content-section {
             display: none;
             animation: fadeIn 0.5s;
@@ -52,8 +46,21 @@
         }
         .chart-container {
             position: relative;
-            height: 300px;
+            height: 400px;
             margin-bottom: 20px;
+        }
+        
+        /* Optional: Center modals vertically */
+        .modal-dialog {
+            margin-top: 80px;
+        }
+        
+        /* Ensure modal content is always visible */
+        .modal .form-control,
+        .modal label,
+        .modal input {
+            display: block !important;
+            visibility: visible !important;
         }
     </style>
 </head>
@@ -515,7 +522,7 @@
 
     <!-- Modals -->
     <div class="modal fade" id="addVolunteerModal">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5>Add Volunteer</h5>
@@ -546,7 +553,7 @@
     </div>
 
     <div class="modal fade" id="addCampModal">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5>Add Camp</h5>
@@ -585,7 +592,7 @@
     </div>
 
     <div class="modal fade" id="addDonationModal">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5>Add Donation</h5>
